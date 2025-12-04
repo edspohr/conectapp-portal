@@ -47,6 +47,8 @@ import {
   Phone,
   Hand,
   Star,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
@@ -96,7 +98,7 @@ const Button = ({
   type = 'button',
 }) => {
   const baseStyle =
-    'px-4 py-2 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.97] shadow-sm';
+    'px-4 py-2 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.97] shadow-sm disabled:opacity-70 disabled:cursor-not-allowed';
   const variants = {
     primary:
       'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200/50',
@@ -111,9 +113,7 @@ const Button = ({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`${baseStyle} ${variants[variant]} ${
-        disabled ? 'opacity-50 cursor-not-allowed' : ''
-      } ${className}`}
+      className={`${baseStyle} ${variants[variant]} ${className}`}
     >
       {children}
     </button>
@@ -127,29 +127,47 @@ const Input = ({
   placeholder,
   type = 'text',
   textarea = false,
+  error,
+  rightElement,
 }) => (
-  <div className="mb-5">
+  <div className="mb-5 relative">
     {label && (
-      <label className="block text-sm font-semibold text-gray-700 mb-1.5 ml-1">
+      <label className={`block text-sm font-semibold mb-1.5 ml-1 ${error ? 'text-red-500' : 'text-gray-700'}`}>
         {label}
       </label>
     )}
     {textarea ? (
       <textarea
-        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all min-h-[100px] bg-gray-50/50 focus:bg-white resize-none"
+        className={`w-full px-4 py-3 border rounded-xl focus:ring-2 outline-none transition-all min-h-[100px] resize-none ${
+          error 
+            ? 'border-red-300 bg-red-50 focus:ring-red-200 focus:border-red-500' 
+            : 'border-gray-200 bg-gray-50/50 focus:bg-white focus:ring-blue-500/20 focus:border-blue-500'
+        }`}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
       />
     ) : (
-      <input
-        type={type}
-        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all bg-gray-50/50 focus:bg-white"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-      />
+      <div className="relative">
+        <input
+          type={type}
+          className={`w-full px-4 py-3 border rounded-xl focus:ring-2 outline-none transition-all ${
+            error 
+              ? 'border-red-300 bg-red-50 focus:ring-red-200 focus:border-red-500' 
+              : 'border-gray-200 bg-gray-50/50 focus:bg-white focus:ring-blue-500/20 focus:border-blue-500'
+          } ${rightElement ? 'pr-12' : ''}`}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+        />
+        {rightElement && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+            {rightElement}
+          </div>
+        )}
+      </div>
     )}
+    {error && <span className="text-xs text-red-500 ml-1 mt-1 font-medium animate-pulse">{error}</span>}
   </div>
 );
 
@@ -185,7 +203,7 @@ const Logo = ({ className = 'w-10 h-10' }) => (
   </div>
 );
 
-/* Botón flotante de WhatsApp Mejorado */
+/* Botón flotante de WhatsApp */
 const WhatsAppButton = ({ hideSnippet }) => (
   <div className="fixed right-4 bottom-24 md:bottom-28 flex flex-col items-end gap-2 z-40 transition-all duration-500">
     <div
@@ -443,6 +461,8 @@ export default function ConectApp() {
 
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
 
   const [activeTab, setActiveTab] = useState('chat');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -501,6 +521,22 @@ export default function ConectApp() {
     } catch (e) {
       console.error('Error upserting profile:', e);
     }
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    if (authMode === 'login') {
+        if (!loginEmail) errors.loginEmail = 'El correo es obligatorio';
+        if (!loginPassword) errors.loginPassword = 'La contraseña es obligatoria';
+    } else {
+        if (!caregiverFirstName) errors.caregiverFirstName = 'El nombre es obligatorio';
+        if (!neuroName) errors.neuroName = 'El nombre del peque es obligatorio';
+        if (!registerEmail) errors.registerEmail = 'El correo es obligatorio';
+        if (!registerPassword) errors.registerPassword = 'La contraseña es obligatoria';
+        if (registerPassword !== registerPasswordConfirm) errors.registerPasswordConfirm = 'Las contraseñas no coinciden';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   /* --- EFECTOS --- */
@@ -693,7 +729,7 @@ export default function ConectApp() {
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
-    if (!loginEmail || !loginPassword) return;
+    if (!validateForm()) return;
     setAuthLoading(true);
     try {
       const result = await signInWithEmailAndPassword(
@@ -711,14 +747,7 @@ export default function ConectApp() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (!registerEmail || !registerPassword || !caregiverFirstName) {
-      setAuthError('Faltan datos obligatorios.');
-      return;
-    }
-    if (registerPassword !== registerPasswordConfirm) {
-      setAuthError('Las contraseñas no coinciden.');
-      return;
-    }
+    if (!validateForm()) return;
     setAuthLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(
@@ -763,9 +792,29 @@ export default function ConectApp() {
         await signInWithRedirect(auth, googleProvider);
       } else {
         setAuthError('Error con Google Login. Verifica configuración.');
+        setAuthLoading(false); // Only turn off if not redirecting
       }
-    } finally {
-      setAuthLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setAuthError('');
+    if (!loginEmail.trim()) {
+      setAuthError(
+        'Escribe tu correo en el campo de arriba para enviarte el enlace.'
+      );
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, loginEmail.trim());
+      setAuthError(
+        '¡Listo! Revisa tu correo (y spam) para restablecer la contraseña.'
+      );
+    } catch (err) {
+      console.error(err);
+      setAuthError(
+        'No pudimos enviar el correo. Verifica que esté bien escrito.'
+      );
     }
   };
 
@@ -974,16 +1023,16 @@ export default function ConectApp() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50/50 px-4">
-        <div className="bg-white p-8 rounded-3xl shadow-xl shadow-blue-100/50 w-full max-w-md border border-white">
+        <div className="bg-white p-8 rounded-3xl shadow-xl shadow-blue-100/50 w-full max-w-md border border-white animate-fade-in">
           <div className="text-center mb-8">
             <Logo className="w-20 h-20 mx-auto mb-4" />
             <h1 className="text-3xl font-bold text-slate-800 tracking-tight">ConectApp</h1>
-            <p className="text-blue-600 mt-1">Acompañamiento neurodivergente</p>
+            <p className="text-blue-600 mt-1 font-medium">Acompañamiento para familias neurodivergentes</p>
           </div>
           
           <div className="flex gap-2 mb-6 bg-gray-100/50 p-1 rounded-xl">
             <button
-              onClick={() => setAuthMode('login')}
+              onClick={() => { setAuthMode('login'); setFormErrors({}); setAuthError(''); }}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 authMode === 'login'
                   ? 'bg-white text-blue-700 shadow-sm'
@@ -993,7 +1042,7 @@ export default function ConectApp() {
               Ingresar
             </button>
             <button
-              onClick={() => setAuthMode('register')}
+              onClick={() => { setAuthMode('register'); setFormErrors({}); setAuthError(''); }}
               className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 authMode === 'register'
                   ? 'bg-white text-blue-700 shadow-sm'
@@ -1005,76 +1054,129 @@ export default function ConectApp() {
           </div>
 
           {authError && (
-            <div className="text-red-600 text-xs mb-4 bg-red-50 p-3 rounded-xl border border-red-100">
+            <div className="text-red-600 text-xs mb-4 bg-red-50 p-3 rounded-xl border border-red-100 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               {authError}
             </div>
           )}
 
-          <form
-            onSubmit={authMode === 'login' ? handleEmailLogin : handleRegister}
-            className="space-y-1"
-          >
-            {authMode === 'register' && (
-              <>
+          <div className="animate-fade-in">
+            {authMode === 'login' ? (
+              <form onSubmit={handleEmailLogin} className="space-y-1">
                 <Input
-                  placeholder="Tu Nombre"
-                  value={caregiverFirstName}
-                  onChange={(e) => setCaregiverFirstName(e.target.value)}
+                  label="Correo electrónico"
+                  type="email"
+                  placeholder="tucorreo@ejemplo.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  error={formErrors.loginEmail}
                 />
                 <Input
-                  placeholder="Nombre de tu Peque"
-                  value={neuroName}
-                  onChange={(e) => setNeuroName(e.target.value)}
+                  label="Contraseña"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="********"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  error={formErrors.loginPassword}
+                  rightElement={
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                    </button>
+                  }
                 />
-              </>
-            )}
-            <Input
-              type="email"
-              placeholder="Correo electrónico"
-              value={authMode === 'login' ? loginEmail : registerEmail}
-              onChange={(e) =>
-                authMode === 'login'
-                  ? setLoginEmail(e.target.value)
-                  : setRegisterEmail(e.target.value)
-              }
-            />
-            <Input
-              type="password"
-              placeholder="Contraseña"
-              value={authMode === 'login' ? loginPassword : registerPassword}
-              onChange={(e) =>
-                authMode === 'login'
-                  ? setLoginPassword(e.target.value)
-                  : setRegisterPassword(e.target.value)
-              }
-            />
-            {authMode === 'register' && (
-              <Input
-                type="password"
-                placeholder="Confirmar Contraseña"
-                value={registerPasswordConfirm}
-                onChange={(e) => setRegisterPasswordConfirm(e.target.value)}
-              />
-            )}
+                
+                <div className="flex justify-end mb-6">
+                  <button
+                    type="button"
+                    onClick={handlePasswordReset}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
 
-            <Button type="submit" disabled={authLoading} className="w-full py-3 mt-4">
-              {authLoading
-                ? 'Procesando...'
-                : authMode === 'login'
-                ? 'Entrar'
-                : 'Crear Cuenta'}
-            </Button>
-          </form>
+                <Button type="submit" disabled={authLoading} className="w-full py-3 mb-4">
+                  {authLoading ? 'Ingresando...' : 'Entrar'}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Tu Nombre"
+                    placeholder="Ej. Ana"
+                    value={caregiverFirstName}
+                    onChange={(e) => setCaregiverFirstName(e.target.value)}
+                    error={formErrors.caregiverFirstName}
+                  />
+                  <Input
+                    label="Nombre Peque"
+                    placeholder="Ej. Leo"
+                    value={neuroName}
+                    onChange={(e) => setNeuroName(e.target.value)}
+                    error={formErrors.neuroName}
+                  />
+                </div>
+                <Input
+                  label="Correo"
+                  type="email"
+                  placeholder="tucorreo@ejemplo.com"
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  error={formErrors.registerEmail}
+                />
+                <Input
+                  label="Contraseña"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="********"
+                  value={registerPassword}
+                  onChange={(e) => setRegisterPassword(e.target.value)}
+                  error={formErrors.registerPassword}
+                  rightElement={
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}
+                    </button>
+                  }
+                />
+                <Input
+                  label="Confirmar"
+                  type="password"
+                  placeholder="********"
+                  value={registerPasswordConfirm}
+                  onChange={(e) => setRegisterPasswordConfirm(e.target.value)}
+                  error={formErrors.registerPasswordConfirm}
+                />
+
+                <Button type="submit" disabled={authLoading} className="w-full py-3 mt-4">
+                  {authLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
+                </Button>
+              </form>
+            )}
+          </div>
 
           <div className="mt-6 border-t border-gray-100 pt-6">
             <button
               onClick={handleGoogleLogin}
-              className="w-full bg-white border border-gray-200 py-3 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors text-slate-700 font-medium"
+              disabled={authLoading}
+              className="w-full bg-white border border-gray-200 py-3 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors text-slate-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <img src="https://developers.google.com/identity/images/g-logo.png" className="w-5 h-5" alt="G" />
-              Continuar con Google
+              {authLoading ? (
+                <span className="text-gray-400">Conectando...</span>
+              ) : (
+                <>
+                  <img src="https://developers.google.com/identity/images/g-logo.png" className="w-5 h-5" alt="G" />
+                  Continuar con Google
+                </>
+              )}
             </button>
           </div>
+
+          <p className="mt-6 text-[10px] text-center text-gray-400 leading-tight">
+            Accediendo a la aplicación implica la aceptación de nuestros{' '}
+            <a href="#" className="underline hover:text-blue-600">
+              Términos y Condiciones de Servicio
+            </a>.
+          </p>
         </div>
       </div>
     );
