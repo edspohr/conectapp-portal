@@ -47,6 +47,7 @@ import {
   Check,
   Phone,
   Hand,
+  Star,
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
