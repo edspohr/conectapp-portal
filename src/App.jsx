@@ -10,6 +10,8 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendPasswordResetEmail,
 } from 'firebase/auth';
 
@@ -18,6 +20,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   collection,
   addDoc,
@@ -44,6 +47,7 @@ import {
   Check,
   Phone,
   Hand,
+  Star,
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
@@ -484,6 +488,31 @@ export default function ConectApp() {
 
   const messagesEndRef = useRef(null);
 
+  const upsertProfileFromAuth = async (userCred, extraData = {}) => {
+    if (!userCred?.uid) return;
+    const profileRef = doc(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      userCred.uid,
+      'data',
+      'profile',
+    );
+
+    await setDoc(
+      profileRef,
+      {
+        email: userCred.email || '',
+        caregiverFirstName: userCred.displayName
+          ? userCred.displayName.split(' ')[0]
+          : '',
+        ...extraData,
+      },
+      { merge: true },
+    );
+  };
+
   /* --- EFECTO: escuchar cambios de autenticación --- */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -492,6 +521,36 @@ export default function ConectApp() {
       setAuthError('');
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const pendingRedirect =
+      typeof window !== 'undefined' &&
+      window.sessionStorage.getItem('googleRedirect') === '1';
+
+    if (!pendingRedirect) return undefined;
+
+    setAuthLoading(true);
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          upsertProfileFromAuth(result.user);
+        }
+      })
+      .catch((err) => {
+        console.error('Error finalizando login con Google:', err);
+        setAuthError(
+          'No pudimos validar el inicio de sesión con Google. Intenta nuevamente.',
+        );
+      })
+      .finally(() => {
+        setAuthLoading(false);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem('googleRedirect');
+        }
+      });
+
+    return undefined;
   }, []);
 
   /* --- EFECTO: cargar perfil y bitácora cuando hay usuario --- */
@@ -549,6 +608,37 @@ export default function ConectApp() {
 
     const ensureSession = async () => {
       const snap = await getDoc(sessionRef);
+      if (snap.exists()) return;
+
+      let restoredSessionId = null;
+      try {
+        const messagesRef = collection(
+          db,
+          'artifacts',
+          appId,
+          'users',
+          user.uid,
+          'conversations',
+        );
+        const lastMessageQuery = query(
+          messagesRef,
+          orderBy('createdAt', 'desc'),
+          limit(1),
+        );
+        const lastMessagesSnap = await getDocs(lastMessageQuery);
+        if (!lastMessagesSnap.empty) {
+          restoredSessionId = lastMessagesSnap.docs[0].data().sessionId || null;
+        }
+      } catch (err) {
+        console.error('No se pudo restaurar la última sesión:', err);
+      }
+
+      const newSessionId = restoredSessionId || `session-${Date.now()}`;
+      await setDoc(sessionRef, {
+        activeSessionId: newSessionId,
+        lastInteractionAt: serverTimestamp(),
+      });
+      setActiveSessionId(newSessionId);
       if (!snap.exists()) {
         const newSessionId = `session-${Date.now()}`;
         await setDoc(sessionRef, {
@@ -598,6 +688,7 @@ export default function ConectApp() {
 
   /* --- EFECTO: cargar conversación activa --- */
   useEffect(() => {
+    if (!user) return undefined;
     if (!user || !activeSessionId) return undefined;
 
     const messagesRef = collection(
@@ -609,6 +700,16 @@ export default function ConectApp() {
       'conversations',
     );
 
+    const baseQuery = activeSessionId
+      ? query(
+          messagesRef,
+          where('sessionId', '==', activeSessionId),
+          orderBy('createdAt', 'desc'),
+          limit(100),
+        )
+      : query(messagesRef, orderBy('createdAt', 'desc'), limit(100));
+
+    const unsubscribeMessages = onSnapshot(baseQuery, (snapshot) => {
     const q = query(
       messagesRef,
       where('sessionId', '==', activeSessionId),
@@ -629,6 +730,18 @@ export default function ConectApp() {
         return;
       }
 
+      if (!activeSessionId && loaded[0]?.sessionId) {
+        setActiveSessionId(loaded[0].sessionId);
+      }
+
+      const normalized = loaded
+        .map((msg) => ({
+          ...msg,
+          timestamp:
+            msg.timestamp ||
+            (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : Date.now()),
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
       const normalized = loaded.map((msg) => ({
         ...msg,
         timestamp:
@@ -693,27 +806,14 @@ export default function ConectApp() {
         registerPassword,
       );
 
-      const profileRef = doc(
-        db,
-        'artifacts',
-        appId,
-        'users',
-        cred.user.uid,
-        'data',
-        'profile',
-      );
-      await setDoc(
-        profileRef,
-        {
-          caregiverFirstName,
-          caregiverLastName,
-          neuroName,
-          patientName: neuroName,
-          email: registerEmail.trim(),
-          createdAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      await upsertProfileFromAuth(cred.user, {
+        caregiverFirstName,
+        caregiverLastName,
+        neuroName,
+        patientName: neuroName,
+        email: registerEmail.trim(),
+        createdAt: serverTimestamp(),
+      });
 
       setAuthMode('login');
       setLoginEmail(registerEmail.trim());
@@ -731,31 +831,36 @@ export default function ConectApp() {
     setAuthLoading(true);
     setAuthError('');
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const userCred = result.user;
+      const prefersRedirect =
+        typeof window !== 'undefined' &&
+        (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent));
 
-      const profileRef = doc(
-        db,
-        'artifacts',
-        appId,
-        'users',
-        userCred.uid,
-        'data',
-        'profile',
-      );
-      await setDoc(
-        profileRef,
-        {
-          email: userCred.email || '',
-          caregiverFirstName: userCred.displayName
-            ? userCred.displayName.split(' ')[0]
-            : '',
-        },
-        { merge: true },
-      );
+      if (prefersRedirect) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('googleRedirect', '1');
+        }
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+
+      const result = await signInWithPopup(auth, googleProvider);
+      await upsertProfileFromAuth(result.user);
     } catch (err) {
       console.error(err);
-      setAuthError('No pudimos iniciar sesión con Google.');
+      if (err?.code === 'auth/popup-blocked') {
+        try {
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem('googleRedirect', '1');
+          }
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectError) {
+          console.error('Redirect Google error:', redirectError);
+        }
+      }
+      setAuthError(
+        'No pudimos iniciar sesión con Google. Verifica el dominio autorizado o intenta nuevamente.',
+      );
     } finally {
       setAuthLoading(false);
     }
@@ -1706,6 +1811,25 @@ export default function ConectApp() {
                 </button>
               </div>
             )}
+
+            <div className="px-4 md:px-6 pt-3 md:pt-4">
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button
+                  variant="secondary"
+                  className="text-xs md:text-sm px-3 py-2"
+                  onClick={() => setActiveTab('profile')}
+                >
+                  <User className="w-4 h-4" /> Ver perfil
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="text-xs md:text-sm px-3 py-2"
+                  onClick={() => setActiveTab('evolution')}
+                >
+                  <BookOpen className="w-4 h-4" /> Bitácora
+                </Button>
+              </div>
+            </div>
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
               {showResumePrompt && (
