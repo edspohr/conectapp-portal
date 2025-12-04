@@ -20,6 +20,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   collection,
   addDoc,
@@ -522,6 +523,13 @@ export default function ConectApp() {
   }, []);
 
   useEffect(() => {
+    const pendingRedirect =
+      typeof window !== 'undefined' &&
+      window.sessionStorage.getItem('googleRedirect') === '1';
+
+    if (!pendingRedirect) return undefined;
+
+    setAuthLoading(true);
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
@@ -530,7 +538,18 @@ export default function ConectApp() {
       })
       .catch((err) => {
         console.error('Error finalizando login con Google:', err);
+        setAuthError(
+          'No pudimos validar el inicio de sesión con Google. Intenta nuevamente.',
+        );
+      })
+      .finally(() => {
+        setAuthLoading(false);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem('googleRedirect');
+        }
       });
+
+    return undefined;
   }, []);
 
   /* --- EFECTO: cargar perfil y bitácora cuando hay usuario --- */
@@ -588,14 +607,37 @@ export default function ConectApp() {
 
     const ensureSession = async () => {
       const snap = await getDoc(sessionRef);
-      if (!snap.exists()) {
-        const newSessionId = `session-${Date.now()}`;
-        await setDoc(sessionRef, {
-          activeSessionId: newSessionId,
-          lastInteractionAt: serverTimestamp(),
-        });
-        setActiveSessionId(newSessionId);
+      if (snap.exists()) return;
+
+      let restoredSessionId = null;
+      try {
+        const messagesRef = collection(
+          db,
+          'artifacts',
+          appId,
+          'users',
+          user.uid,
+          'conversations',
+        );
+        const lastMessageQuery = query(
+          messagesRef,
+          orderBy('createdAt', 'desc'),
+          limit(1),
+        );
+        const lastMessagesSnap = await getDocs(lastMessageQuery);
+        if (!lastMessagesSnap.empty) {
+          restoredSessionId = lastMessagesSnap.docs[0].data().sessionId || null;
+        }
+      } catch (err) {
+        console.error('No se pudo restaurar la última sesión:', err);
       }
+
+      const newSessionId = restoredSessionId || `session-${Date.now()}`;
+      await setDoc(sessionRef, {
+        activeSessionId: newSessionId,
+        lastInteractionAt: serverTimestamp(),
+      });
+      setActiveSessionId(newSessionId);
     };
 
     ensureSession();
@@ -637,7 +679,7 @@ export default function ConectApp() {
 
   /* --- EFECTO: cargar conversación activa --- */
   useEffect(() => {
-    if (!user || !activeSessionId) return undefined;
+    if (!user) return undefined;
 
     const messagesRef = collection(
       db,
@@ -648,14 +690,16 @@ export default function ConectApp() {
       'conversations',
     );
 
-    const q = query(
-      messagesRef,
-      where('sessionId', '==', activeSessionId),
-      orderBy('createdAt', 'desc'),
-      limit(100),
-    );
+    const baseQuery = activeSessionId
+      ? query(
+          messagesRef,
+          where('sessionId', '==', activeSessionId),
+          orderBy('createdAt', 'desc'),
+          limit(100),
+        )
+      : query(messagesRef, orderBy('createdAt', 'desc'), limit(100));
 
-    const unsubscribeMessages = onSnapshot(q, (snapshot) => {
+    const unsubscribeMessages = onSnapshot(baseQuery, (snapshot) => {
       const loaded = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       if (loaded.length === 0) {
         setMessages([
@@ -666,6 +710,10 @@ export default function ConectApp() {
           },
         ]);
         return;
+      }
+
+      if (!activeSessionId && loaded[0]?.sessionId) {
+        setActiveSessionId(loaded[0].sessionId);
       }
 
       const normalized = loaded
@@ -759,12 +807,27 @@ export default function ConectApp() {
     setAuthLoading(true);
     setAuthError('');
     try {
+      const prefersRedirect =
+        typeof window !== 'undefined' &&
+        (window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent));
+
+      if (prefersRedirect) {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('googleRedirect', '1');
+        }
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+
       const result = await signInWithPopup(auth, googleProvider);
       await upsertProfileFromAuth(result.user);
     } catch (err) {
       console.error(err);
       if (err?.code === 'auth/popup-blocked') {
         try {
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem('googleRedirect', '1');
+          }
           await signInWithRedirect(auth, googleProvider);
           return;
         } catch (redirectError) {
@@ -1724,6 +1787,25 @@ export default function ConectApp() {
                 </button>
               </div>
             )}
+
+            <div className="px-4 md:px-6 pt-3 md:pt-4">
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button
+                  variant="secondary"
+                  className="text-xs md:text-sm px-3 py-2"
+                  onClick={() => setActiveTab('profile')}
+                >
+                  <User className="w-4 h-4" /> Ver perfil
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="text-xs md:text-sm px-3 py-2"
+                  onClick={() => setActiveTab('evolution')}
+                >
+                  <BookOpen className="w-4 h-4" /> Bitácora
+                </Button>
+              </div>
+            </div>
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
               {showResumePrompt && (
