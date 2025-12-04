@@ -10,6 +10,8 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendPasswordResetEmail,
 } from 'firebase/auth';
 
@@ -17,6 +19,7 @@ import {
   getFirestore,
   doc,
   setDoc,
+  getDoc,
   onSnapshot,
   collection,
   addDoc,
@@ -24,6 +27,8 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  limit,
+  where,
 } from 'firebase/firestore';
 
 import {
@@ -35,12 +40,12 @@ import {
   BookOpen,
   Menu,
   X,
-  Star,
   AlertTriangle,
   BrainCircuit,
   Edit3,
   Check,
   Phone,
+  Hand,
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
@@ -218,6 +223,7 @@ const WhatsAppButton = () => (
 const JournalEntryItem = ({ entry, userId }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [userNoteDraft, setUserNoteDraft] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const startEditing = () => {
     setUserNoteDraft(entry.userNotes || '');
@@ -249,8 +255,8 @@ const JournalEntryItem = ({ entry, userId }) => {
       <div className="p-5 flex-1 border-b md:border-b-0 md:border-r border-gray-100">
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600">
-              <BrainCircuit className="w-4 h-4" />
+            <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600 animate-pulse">
+              <Hand className="w-4 h-4" />
             </div>
             <h4 className="font-bold text-gray-800 text-sm md:text-base">
               {entry.title || 'Registro Automático'}
@@ -262,7 +268,30 @@ const JournalEntryItem = ({ entry, userId }) => {
               : 'Hoy'}
           </span>
         </div>
-        <p className="text-gray-600 text-sm leading-relaxed">{entry.content}</p>
+        <div
+          className={`text-gray-600 text-sm leading-relaxed transition-all duration-300 ${
+            isExpanded ? 'max-h-[500px]' : 'max-h-12'
+          } overflow-hidden`}
+        >
+          <p
+            style={{
+              display: isExpanded ? 'block' : '-webkit-box',
+              WebkitLineClamp: isExpanded ? 'unset' : 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {entry.fullContent || entry.content}
+          </p>
+        </div>
+        {(entry.fullContent || '').length > 180 && (
+          <button
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-semibold underline"
+          >
+            {isExpanded ? 'Ver menos' : 'Ver más'}
+          </button>
+        )}
       </div>
 
       <div className="p-5 md:w-1/3 bg-gray-50 flex flex-col">
@@ -356,8 +385,7 @@ Eres ConectApp, un acompañante digital para familias neurodivergentes.
 ESTILO:
 - Hablas en español neutro, sin marcar género (usa expresiones como "quien cuida", "la persona cuidadora", "tu peque", "la familia").
 - Evita asumir si la persona es mamá, papá, hombre o mujer.
-- Tono cercano, empático y claro, como un chat de WhatsApp.
-- No das diagnósticos médicos ni reemplazas a profesionales.
+- Tono cercano, empático y claro, como un chat de WhatsApp, con una voz de coach que contiene emocionalmente y cuenta con el respaldo de profesionales.
 
 DINÁMICA DE CONVERSACIÓN:
 - Imagina que estás siguiendo una conversación continua.
@@ -367,11 +395,10 @@ DINÁMICA DE CONVERSACIÓN:
   - Luego conversa: haz 1–2 preguntas sencillas o da hasta 3 ideas prácticas si ayudan.
 - Puedes usar viñetas o numeración SOLO cuando tenga sentido (no siempre).
 - No escribas más de 12 líneas en total.
-- Si notas que ya han hablado mucho rato, puedes recordar brevemente que eres una herramienta de apoyo y no reemplazas a profesionales.
 
 NOCIÓN DE TIEMPO:
 ${tiempoTexto}
-- Si pasaron MÁS de 2 horas y el mensaje parece retomar un tema (por ejemplo: "como te conté antes", "sigamos", etc.), empieza preguntando suavemente si la persona quiere:
+- Si pasaron MÁS de 12 horas y el mensaje parece retomar un tema (por ejemplo: "como te conté antes", "sigamos", etc.), empieza preguntando suavemente si la persona quiere:
   - seguir con la conversación anterior, o
   - hablar de algo nuevo.
 
@@ -400,68 +427,6 @@ MENSAJE ACTUAL DE LA FAMILIA:
 
 RESPUESTA:
 Responde siguiendo TODO lo anterior, de forma simple, empática y práctica.
-`;
-}
-
-/* Detección de título para bitácora según contenido y tema */
-function detectJournalTitle(text, currentTopic) {
-  const lower = text.toLowerCase();
-
-  if (currentTopic && currentTopic.length > 0) {
-    if (lower.includes('plan') || lower.includes('paso')) {
-      return `Plan de acción sobre ${currentTopic}`;
-    }
-    if (lower.includes('idea') || lower.includes('puedes probar')) {
-      return `Ideas prácticas para ${currentTopic}`;
-    }
-  }
-
-  if (lower.includes('plan') || lower.includes('paso')) {
-    return 'Plan de acción sugerido';
-  }
-  if (lower.includes('logro') || lower.includes('mejoró')) {
-    return 'Progreso / logro destacado';
-  }
-  if (lower.includes('resumen')) {
-    return 'Resumen de la conversación';
-  }
-
-  return 'Registro de conversación';
-}
-
-/* Prompt para mini resumen del día */
-function buildDaySummaryPrompt(messages, profileData) {
-  const condensed = messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .slice(-30)
-    .map((m) => `${m.role === 'user' ? 'FAMILIA' : 'CONECTAPP'}: ${m.content}`)
-    .join('\n');
-
-  return `
-Eres ConectApp, un acompañante digital para familias neurodivergentes.
-
-Quiero que hagas un mini resumen del día para la familia cuidadora.
-
-Contexto:
-- Persona cuidadora: ${profileData.caregiverFirstName || 'quien cuida'} ${
-    profileData.caregiverLastName || ''
-  }
-- Ser querido neurodivergente: ${
-    profileData.neuroName || profileData.patientName || 'tu peque'
-  }
-
-Mensajes recientes del día:
-${condensed || 'No hay mucha conversación hoy.'}
-
-Tu tarea:
-- Escribe de 4 a 6 líneas máximo.
-- Usa lenguaje simple y neutro.
-- Incluye:
-  1) Cómo estuvo en general el tono emocional (por ejemplo: tenso, cansado, más tranquilo, etc.).
-  2) Una idea que pareció útil o que vale la pena repetir.
-  3) Una cosa concreta para probar mañana o en los próximos días.
-
-No uses formato muy formal, escribe como un resumen breve para la familia.
 `;
 }
 
@@ -516,9 +481,35 @@ export default function ConectApp() {
 
   const [journalEntries, setJournalEntries] = useState([]);
   const [currentTopic, setCurrentTopic] = useState('');
-  const [daySummaryLoading, setDaySummaryLoading] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
 
   const messagesEndRef = useRef(null);
+
+  const upsertProfileFromAuth = async (userCred, extraData = {}) => {
+    if (!userCred?.uid) return;
+    const profileRef = doc(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      userCred.uid,
+      'data',
+      'profile',
+    );
+
+    await setDoc(
+      profileRef,
+      {
+        email: userCred.email || '',
+        caregiverFirstName: userCred.displayName
+          ? userCred.displayName.split(' ')[0]
+          : '',
+        ...extraData,
+      },
+      { merge: true },
+    );
+  };
 
   /* --- EFECTO: escuchar cambios de autenticación --- */
   useEffect(() => {
@@ -530,10 +521,31 @@ export default function ConectApp() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          upsertProfileFromAuth(result.user);
+        }
+      })
+      .catch((err) => {
+        console.error('Error finalizando login con Google:', err);
+      });
+  }, []);
+
   /* --- EFECTO: cargar perfil y bitácora cuando hay usuario --- */
   useEffect(() => {
     if (!user) {
       setJournalEntries([]);
+      setMessages([
+        {
+          role: 'system',
+          content:
+            'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte, entenderte y buscar juntos estrategias simples para tu familia. ¿Cómo te sientes hoy?',
+        },
+      ]);
+      setActiveSessionId(null);
+      setShowResumePrompt(false);
       return;
     }
 
@@ -564,6 +576,44 @@ export default function ConectApp() {
       }
     });
 
+    const sessionRef = doc(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      user.uid,
+      'data',
+      'session',
+    );
+
+    const ensureSession = async () => {
+      const snap = await getDoc(sessionRef);
+      if (!snap.exists()) {
+        const newSessionId = `session-${Date.now()}`;
+        await setDoc(sessionRef, {
+          activeSessionId: newSessionId,
+          lastInteractionAt: serverTimestamp(),
+        });
+        setActiveSessionId(newSessionId);
+      }
+    };
+
+    ensureSession();
+
+    const unsubscribeSession = onSnapshot(sessionRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.activeSessionId) {
+          setActiveSessionId(data.activeSessionId);
+        }
+        if (data.lastInteractionAt?.seconds) {
+          const lastDate = data.lastInteractionAt.seconds * 1000;
+          const hoursDiff = (Date.now() - lastDate) / (1000 * 60 * 60);
+          setShowResumePrompt(hoursDiff > 12);
+        }
+      }
+    });
+
     const journalRef = collection(
       db,
       'artifacts',
@@ -581,8 +631,56 @@ export default function ConectApp() {
     return () => {
       unsubscribeProfile();
       unsubscribeJournal();
+      unsubscribeSession();
     };
   }, [user]);
+
+  /* --- EFECTO: cargar conversación activa --- */
+  useEffect(() => {
+    if (!user || !activeSessionId) return undefined;
+
+    const messagesRef = collection(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      user.uid,
+      'conversations',
+    );
+
+    const q = query(
+      messagesRef,
+      where('sessionId', '==', activeSessionId),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    );
+
+    const unsubscribeMessages = onSnapshot(q, (snapshot) => {
+      const loaded = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (loaded.length === 0) {
+        setMessages([
+          {
+            role: 'system',
+            content:
+              'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte, entenderte y buscar juntos estrategias simples para tu familia. ¿Cómo te sientes hoy?',
+          },
+        ]);
+        return;
+      }
+
+      const normalized = loaded
+        .map((msg) => ({
+          ...msg,
+          timestamp:
+            msg.timestamp ||
+            (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : Date.now()),
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
+      setMessages(normalized);
+    });
+
+    return () => unsubscribeMessages();
+  }, [user, activeSessionId]);
 
   /* --- EFECTO: hacer scroll al final del chat --- */
   useEffect(() => {
@@ -636,27 +734,14 @@ export default function ConectApp() {
         registerPassword,
       );
 
-      const profileRef = doc(
-        db,
-        'artifacts',
-        appId,
-        'users',
-        cred.user.uid,
-        'data',
-        'profile',
-      );
-      await setDoc(
-        profileRef,
-        {
-          caregiverFirstName,
-          caregiverLastName,
-          neuroName,
-          patientName: neuroName,
-          email: registerEmail.trim(),
-          createdAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      await upsertProfileFromAuth(cred.user, {
+        caregiverFirstName,
+        caregiverLastName,
+        neuroName,
+        patientName: neuroName,
+        email: registerEmail.trim(),
+        createdAt: serverTimestamp(),
+      });
 
       setAuthMode('login');
       setLoginEmail(registerEmail.trim());
@@ -675,30 +760,20 @@ export default function ConectApp() {
     setAuthError('');
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const userCred = result.user;
-
-      const profileRef = doc(
-        db,
-        'artifacts',
-        appId,
-        'users',
-        userCred.uid,
-        'data',
-        'profile',
-      );
-      await setDoc(
-        profileRef,
-        {
-          email: userCred.email || '',
-          caregiverFirstName: userCred.displayName
-            ? userCred.displayName.split(' ')[0]
-            : '',
-        },
-        { merge: true },
-      );
+      await upsertProfileFromAuth(result.user);
     } catch (err) {
       console.error(err);
-      setAuthError('No pudimos iniciar sesión con Google.');
+      if (err?.code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectError) {
+          console.error('Redirect Google error:', redirectError);
+        }
+      }
+      setAuthError(
+        'No pudimos iniciar sesión con Google. Verifica el dominio autorizado o intenta nuevamente.',
+      );
     } finally {
       setAuthLoading(false);
     }
@@ -794,23 +869,22 @@ export default function ConectApp() {
 
   const saveJournalEntry = async (
     content,
-    title = 'Registro de conversación',
+    title = 'Hito de conversación',
   ) => {
-    if (!user) return;
+    if (!user || !activeSessionId) return;
     try {
       await addDoc(
         collection(db, 'artifacts', appId, 'users', user.uid, 'journal'),
         {
           title,
-          content:
-            content.substring(0, 300) + (content.length > 300 ? '...' : ''),
+          content,
           fullContent: content,
           userNotes: '',
           createdAt: serverTimestamp(),
-          type: 'auto-generated',
+          type: 'milestone',
+          sessionId: activeSessionId,
         },
       );
-      console.log('Entrada guardada automáticamente');
     } catch (error) {
       console.error('Error saving journal:', error);
     }
@@ -838,15 +912,101 @@ export default function ConectApp() {
     return dangerKeywords.some((keyword) => lowerText.includes(keyword));
   };
 
+  const updateLastInteraction = async () => {
+    if (!user) return;
+    const sessionRef = doc(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      user.uid,
+      'data',
+      'session',
+    );
+    await setDoc(
+      sessionRef,
+      {
+        lastInteractionAt: serverTimestamp(),
+        activeSessionId: activeSessionId || `session-${Date.now()}`,
+      },
+      { merge: true },
+    );
+  };
+
+  const startNewConversation = async () => {
+    if (!user) return;
+    const newSessionId = `session-${Date.now()}`;
+    const sessionRef = doc(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      user.uid,
+      'data',
+      'session',
+    );
+    await setDoc(
+      sessionRef,
+      { activeSessionId: newSessionId, lastInteractionAt: serverTimestamp() },
+      { merge: true },
+    );
+    setActiveSessionId(newSessionId);
+    setShowResumePrompt(false);
+    setMessages([
+      {
+        role: 'system',
+        content:
+          'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte, entenderte y buscar juntos estrategias simples para tu familia. ¿Cómo te sientes hoy?',
+      },
+    ]);
+  };
+
+  const conversationWindow = () =>
+    messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-20);
+
+  const buildMilestoneSummary = () => {
+    const recent = messages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-8);
+    if (recent.length === 0) return 'Sin mensajes recientes.';
+    return recent
+      .map(
+        (m) =>
+          `${m.role === 'user' ? 'Familia' : 'ConectApp'}: ${m.content.trim()}`,
+      )
+      .join('\n');
+  };
+
+  const handleSaveMilestoneFromMessage = (msg) => {
+    const summary = buildMilestoneSummary();
+    const milestoneText = `${summary}\n\nMensaje clave de ConectApp:\n${msg.content}`;
+    saveJournalEntry(milestoneText, 'Hito de conversación');
+  };
+
   /* --- ENVÍO DE MENSAJE / GEMINI --- */
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || !user) return;
+
+    if (!activeSessionId) {
+      await startNewConversation();
+    }
+
+    const messagesRef = collection(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      user.uid,
+      'conversations',
+    );
 
     const now = Date.now();
 
-    const lastMsgWithTime = [...messages]
+    const lastMsgWithTime = [...conversationWindow()]
       .reverse()
       .find((m) => typeof m.timestamp === 'number');
 
@@ -878,10 +1038,23 @@ export default function ConectApp() {
     setIsTyping(true);
 
     try {
+      await addDoc(messagesRef, {
+        role: 'user',
+        content: inputMessage,
+        createdAt: serverTimestamp(),
+        timestamp: now,
+        sessionId: activeSessionId,
+      });
+      await updateLastInteraction();
+    } catch (error) {
+      console.error('Error guardando mensaje del usuario:', error);
+    }
+
+    try {
       const contextPrompt = buildGeminiPrompt(
         newMsg.content,
         { ...profileData, caregiverFirstName, caregiverLastName, neuroName },
-        messages,
+        conversationWindow(),
         hoursSinceLastMsg,
         currentTopic,
       );
@@ -925,9 +1098,17 @@ export default function ConectApp() {
 
       setMessages((prev) => [...prev, assistantMsg]);
 
-      if (aiText.length > 150) {
-        const title = detectJournalTitle(aiText, currentTopic);
-        saveJournalEntry(aiText, title);
+      try {
+        await addDoc(messagesRef, {
+          role: 'assistant',
+          content: aiText,
+          createdAt: serverTimestamp(),
+          timestamp: assistantMsg.timestamp,
+          sessionId: activeSessionId,
+        });
+        await updateLastInteraction();
+      } catch (error) {
+        console.error('Error guardando mensaje de la IA:', error);
       }
     } catch (error) {
       console.error('AI Error:', error);
@@ -941,51 +1122,6 @@ export default function ConectApp() {
       ]);
     } finally {
       setIsTyping(false);
-    }
-  };
-
-  /* --- MINI RESUMEN DEL DÍA --- */
-
-  const handleGenerateDaySummary = async () => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-    if (!apiKey) {
-      alert(
-        'Configura VITE_GEMINI_API_KEY en tu entorno para generar el mini resumen del día.',
-      );
-      return;
-    }
-
-    setDaySummaryLoading(true);
-    try {
-      const prompt = buildDaySummaryPrompt(messages, {
-        ...profileData,
-        caregiverFirstName,
-        caregiverLastName,
-        neuroName,
-      });
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        },
-      );
-
-      const data = await response.json();
-      const aiText =
-        data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        'Hoy no tengo mucho que resumir, pero recuerda que cada pequeño esfuerzo cuenta.';
-
-      await saveJournalEntry(aiText, 'Mini resumen del día');
-    } catch (err) {
-      console.error(err);
-      alert('No pudimos generar el resumen. Intenta nuevamente más tarde.');
-    } finally {
-      setDaySummaryLoading(false);
     }
   };
 
@@ -1544,29 +1680,18 @@ export default function ConectApp() {
                     Bitácora de Evolución
                   </h2>
                 </div>
-                <Button
-                  onClick={handleGenerateDaySummary}
-                  disabled={daySummaryLoading}
-                  className="w-full md:w-auto justify-center"
-                  variant="secondary"
-                >
-                  <Star className="w-4 h-4" />
-                  {daySummaryLoading
-                    ? 'Generando resumen...'
-                    : 'Mini resumen del día'}
-                </Button>
               </div>
               <p className="text-gray-500 mb-8 text-sm">
-                Aquí guardamos los hitos importantes de tus conversaciones. El
-                mini resumen del día te ayuda a ver el panorama general.
+                Aquí guardas los hitos importantes de tus conversaciones y los
+                resúmenes que decidas marcar manualmente.
               </p>
 
               {journalEntries.length === 0 ? (
                 <div className="text-center p-12 bg-white rounded-xl border border-dashed border-gray-300">
                   <p className="text-gray-400">Aún no hay registros.</p>
                   <p className="text-sm text-gray-300 mt-2">
-                    Cuando tengas conversaciones relevantes, la IA las
-                    registrará aquí automáticamente.
+                    Usa el botón de “Guardar en bitácora” desde tus
+                    conversaciones con ConectApp para dejar tus hitos.
                   </p>
                 </div>
               ) : (
@@ -1601,6 +1726,31 @@ export default function ConectApp() {
             )}
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+              {showResumePrompt && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-sm animate-pulse">
+                  <div>
+                    <p className="font-semibold text-blue-800 text-sm md:text-base">
+                      Retomemos la conversación
+                    </p>
+                    <p className="text-xs md:text-sm text-blue-700">
+                      Pasó tiempo desde el último intercambio. ¿Quieres seguir donde lo dejaste o empezar un nuevo hilo?
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowResumePrompt(false)}
+                      className="text-blue-700 border-blue-200 hover:bg-blue-100"
+                    >
+                      Continuar conversación
+                    </Button>
+                    <Button onClick={startNewConversation} className="bg-blue-600 text-white hover:bg-blue-700">
+                      Nueva conversación
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Chips de temas rápidos */}
               <div className="mb-2">
                 <div className="flex flex-wrap gap-2">
@@ -1660,6 +1810,17 @@ export default function ConectApp() {
                       </p>
                     ))}
                   </div>
+                  {msg.role === 'assistant' && (
+                    <div className="flex flex-col items-start ml-2 mt-1">
+                      <button
+                        onClick={() => handleSaveMilestoneFromMessage(msg)}
+                        className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-100 rounded-full px-3 py-1 flex items-center gap-1 transition-all duration-200 shadow-sm"
+                      >
+                        <Save className="w-3 h-3" />
+                        Guardar en bitácora
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
 
