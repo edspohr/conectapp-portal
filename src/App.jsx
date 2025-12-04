@@ -10,6 +10,8 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendPasswordResetEmail,
 } from 'firebase/auth';
 
@@ -44,6 +46,7 @@ import {
   Check,
   Phone,
   Hand,
+  Star,
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
@@ -166,7 +169,6 @@ const Card = ({ children, title, icon: Icon, className = '' }) => (
 
 const Logo = ({ className = 'w-10 h-10' }) => (
   <div className={`${className} relative flex items-center justify-center`}>
-    {/* Coloca public/img/logo.png en tu proyecto */}
     <img
       src="/img/logo.png"
       alt="ConectApp Logo"
@@ -184,7 +186,7 @@ const Logo = ({ className = 'w-10 h-10' }) => (
   </div>
 );
 
-/* Botón flotante de WhatsApp + snippet */
+/* Botón flotante de WhatsApp */
 
 const WhatsAppButton = () => (
   <div className="fixed right-4 bottom-24 md:bottom-28 flex flex-col items-end gap-2 z-40">
@@ -201,7 +203,6 @@ const WhatsAppButton = () => (
       className="w-14 h-14 md:w-16 md:h-16 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-full shadow-lg flex items-center justify-center transition-transform duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366]"
       aria-label="Escribir por WhatsApp"
     >
-      {/* Ícono clásico de WhatsApp en SVG */}
       <svg
         viewBox="0 0 32 32"
         className="w-7 h-7 md:w-8 md:h-8"
@@ -484,6 +485,50 @@ export default function ConectApp() {
 
   const messagesEndRef = useRef(null);
 
+  /* --- UTILS: Upsert de Perfil --- */
+  const upsertUserProfile = async (userObj) => {
+    if (!userObj) return;
+    const profileRef = doc(
+      db,
+      'artifacts',
+      appId,
+      'users',
+      userObj.uid,
+      'data',
+      'profile',
+    );
+    try {
+      await setDoc(
+        profileRef,
+        {
+          email: userObj.email || '',
+          caregiverFirstName: userObj.displayName
+            ? userObj.displayName.split(' ')[0]
+            : '',
+          // No sobrescribimos campos existentes si ya están llenos
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      console.error('Error upserting profile:', e);
+    }
+  };
+
+  /* --- EFECTO: Detectar Redirect Login al cargar --- */
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result && result.user) {
+          await upsertUserProfile(result.user);
+          // El onAuthStateChanged se encargará de setear el usuario
+        }
+      })
+      .catch((error) => {
+        console.error('Error en redirect login:', error);
+        setAuthError('Error completando el inicio de sesión.');
+      });
+  }, []);
+
   /* --- EFECTO: escuchar cambios de autenticación --- */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -609,11 +654,12 @@ export default function ConectApp() {
       'conversations',
     );
 
+    // MODIFICACIÓN: limit(100) y orderBy desc para asegurar los ÚLTIMOS mensajes
     const q = query(
       messagesRef,
       where('sessionId', '==', activeSessionId),
-      orderBy('createdAt', 'asc'),
-      limit(200),
+      orderBy('createdAt', 'desc'),
+      limit(100),
     );
 
     const unsubscribeMessages = onSnapshot(q, (snapshot) => {
@@ -629,12 +675,16 @@ export default function ConectApp() {
         return;
       }
 
-      const normalized = loaded.map((msg) => ({
-        ...msg,
-        timestamp:
-          msg.timestamp ||
-          (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : Date.now()),
-      }));
+      // Revertimos para mostrar en orden cronológico (antiguo -> nuevo) en el chat
+      const normalized = loaded
+        .map((msg) => ({
+          ...msg,
+          timestamp:
+            msg.timestamp ||
+            (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : Date.now()),
+        }))
+        .reverse();
+      
       setMessages(normalized);
     });
 
@@ -656,7 +706,9 @@ export default function ConectApp() {
     setAuthLoading(true);
     setAuthError('');
     try {
-      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      const result = await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      // Upsert profile en caso de que falte info básica
+      await upsertUserProfile(result.user);
     } catch (err) {
       console.error(err);
       setAuthError('Revisa tu correo y contraseña.');
@@ -731,32 +783,28 @@ export default function ConectApp() {
     setAuthLoading(true);
     setAuthError('');
     try {
+      // Intentar primero con Popup
       const result = await signInWithPopup(auth, googleProvider);
-      const userCred = result.user;
-
-      const profileRef = doc(
-        db,
-        'artifacts',
-        appId,
-        'users',
-        userCred.uid,
-        'data',
-        'profile',
-      );
-      await setDoc(
-        profileRef,
-        {
-          email: userCred.email || '',
-          caregiverFirstName: userCred.displayName
-            ? userCred.displayName.split(' ')[0]
-            : '',
-        },
-        { merge: true },
-      );
+      await upsertUserProfile(result.user);
     } catch (err) {
-      console.error(err);
-      setAuthError('No pudimos iniciar sesión con Google.');
+      console.error("Popup login failed, trying redirect", err);
+      // Fallback a Redirect si el popup falla (bloqueado, cerrado, mobile)
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          // Nota: El resultado se manejará en el useEffect getRedirectResult
+          return; 
+        } catch (redirectErr) {
+          console.error(redirectErr);
+          setAuthError('No pudimos iniciar sesión con Google (Redirect falló).');
+        }
+      } else {
+        setAuthError('No pudimos iniciar sesión con Google.');
+      }
     } finally {
+      // Solo desactivamos loading si NO iniciamos un redirect
+      // Si iniciamos redirect, la página recargará, así que loading da igual.
+      // Pero si falló popup y no fuimos a redirect, apagamos loading.
       setAuthLoading(false);
     }
   };
