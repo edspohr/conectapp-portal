@@ -639,6 +639,14 @@ export default function ConectApp() {
         lastInteractionAt: serverTimestamp(),
       });
       setActiveSessionId(newSessionId);
+      if (!snap.exists()) {
+        const newSessionId = `session-${Date.now()}`;
+        await setDoc(sessionRef, {
+          activeSessionId: newSessionId,
+          lastInteractionAt: serverTimestamp(),
+        });
+        setActiveSessionId(newSessionId);
+      }
     };
 
     ensureSession();
@@ -681,6 +689,7 @@ export default function ConectApp() {
   /* --- EFECTO: cargar conversación activa --- */
   useEffect(() => {
     if (!user) return undefined;
+    if (!user || !activeSessionId) return undefined;
 
     const messagesRef = collection(
       db,
@@ -701,6 +710,14 @@ export default function ConectApp() {
       : query(messagesRef, orderBy('createdAt', 'desc'), limit(100));
 
     const unsubscribeMessages = onSnapshot(baseQuery, (snapshot) => {
+    const q = query(
+      messagesRef,
+      where('sessionId', '==', activeSessionId),
+      orderBy('createdAt', 'asc'),
+      limit(200),
+    );
+
+    const unsubscribeMessages = onSnapshot(q, (snapshot) => {
       const loaded = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       if (loaded.length === 0) {
         setMessages([
@@ -725,6 +742,12 @@ export default function ConectApp() {
             (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : Date.now()),
         }))
         .sort((a, b) => a.timestamp - b.timestamp);
+      const normalized = loaded.map((msg) => ({
+        ...msg,
+        timestamp:
+          msg.timestamp ||
+          (msg.createdAt?.seconds ? msg.createdAt.seconds * 1000 : Date.now()),
+      }));
       setMessages(normalized);
     });
 
