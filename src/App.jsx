@@ -4,10 +4,15 @@ import './App.css';
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
-  signInAnonymously,
   onAuthStateChanged,
   signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
+
 import {
   getFirestore,
   doc,
@@ -20,6 +25,7 @@ import {
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
+
 import {
   MessageSquare,
   User,
@@ -29,7 +35,6 @@ import {
   BookOpen,
   Menu,
   X,
-  Hand,
   Star,
   AlertTriangle,
   BrainCircuit,
@@ -45,7 +50,36 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = import.meta.env.VITE_APP_ID || 'default-app-id';
 
-/* --- COMPONENTES UI --- */
+const googleProvider = new GoogleAuthProvider();
+
+/* --- TEMAS RÁPIDOS DE CONVERSACIÓN --- */
+const QUICK_TOPICS = [
+  {
+    id: 'rutinas_sueno',
+    label: 'Rutinas de sueño',
+    suggestion: 'Quiero hablar de las rutinas de sueño de mi peque.',
+  },
+  {
+    id: 'crisis',
+    label: 'Crisis y desregulación',
+    suggestion:
+      'Necesito ideas para manejar las crisis y la desregulación de mi peque.',
+  },
+  {
+    id: 'colegio',
+    label: 'Colegio / social',
+    suggestion:
+      'Quiero hablar sobre el colegio, lo social y cómo ayudarle a adaptarse.',
+  },
+  {
+    id: 'desahogo',
+    label: 'Necesito desahogarme',
+    suggestion:
+      'Sólo quiero desahogarme hoy. Ha sido un día intenso y necesito contarlo.',
+  },
+];
+
+/* --- COMPONENTES UI BÁSICOS --- */
 
 const Button = ({
   children,
@@ -56,10 +90,10 @@ const Button = ({
   type = 'button',
 }) => {
   const baseStyle =
-    'px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95';
+    'px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.97]';
   const variants = {
     primary:
-      'bg-blue-700 text-white hover:bg-blue-800 shadow-md shadow-blue-200',
+      'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200',
     secondary:
       'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
     ghost: 'text-gray-500 hover:bg-gray-100',
@@ -89,9 +123,11 @@ const Input = ({
   textarea = false,
 }) => (
   <div className="mb-4">
-    <label className="block text-sm font-medium text-gray-700 mb-1">
-      {label}
-    </label>
+    {label && (
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+    )}
     {textarea ? (
       <textarea
         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all min-h-[100px]"
@@ -127,8 +163,9 @@ const Card = ({ children, title, icon: Icon, className = '' }) => (
 
 const Logo = ({ className = 'w-10 h-10' }) => (
   <div className={`${className} relative flex items-center justify-center`}>
+    {/* Coloca public/img/logo.png en tu proyecto */}
     <img
-      src="img/logo.png"
+      src="/img/logo.png"
       alt="ConectApp Logo"
       className="w-full h-full object-contain"
       onError={(e) => {
@@ -138,23 +175,45 @@ const Logo = ({ className = 'w-10 h-10' }) => (
         const parent = target.parentElement;
         parent.classList.add('bg-blue-100', 'rounded-full', 'text-blue-600');
         parent.innerHTML =
-          '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>';
+          '<span class="text-xs font-bold">CA</span>';
       }}
     />
   </div>
 );
 
+/* Botón flotante de WhatsApp + snippet */
+
 const WhatsAppButton = () => (
-  <a
-    href="https://wa.me/1234567890"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="fixed bottom-32 right-6 bg-[#25D366] hover:bg-[#20bd5a] text-white p-4 rounded-full shadow-lg z-50 transition-transform hover:scale-110 flex items-center justify-center"
-    title="Soporte Humano"
-  >
-    <Hand className="w-6 h-6 fill-current" />
-  </a>
+  <div className="fixed right-4 bottom-24 md:bottom-28 flex flex-col items-end gap-2 z-40">
+    <div className="px-3 py-2 text-[11px] md:text-xs bg-slate-50 border border-slate-200 rounded-lg shadow-sm text-slate-600 max-w-[180px] md:max-w-xs">
+      <span className="font-medium text-slate-800">
+        ¿Necesitas ayuda rápida?
+      </span>{' '}
+      <span>Escríbenos por WhatsApp y te orientamos.</span>
+    </div>
+    <a
+      href="https://wa.me/56965863160"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="w-14 h-14 md:w-16 md:h-16 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-full shadow-lg flex items-center justify-center transition-transform duration-200 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#25D366]"
+      aria-label="Escribir por WhatsApp"
+    >
+      {/* Ícono clásico de WhatsApp en SVG */}
+      <svg
+        viewBox="0 0 32 32"
+        className="w-7 h-7 md:w-8 md:h-8"
+        aria-hidden="true"
+      >
+        <path
+          fill="currentColor"
+          d="M16.04 4C9.96 4 5 8.96 5 15.02c0 2.63.94 5.06 2.52 6.98L6 28l6.17-1.5A11.06 11.06 0 0 0 16.04 26C22.1 26 27 21.04 27 14.98 27.08 8.96 22.12 4 16.04 4zm6.46 15.65c-.27.77-1.58 1.46-2.18 1.5-.6.04-1.2.38-4.05-.84-3.41-1.49-5.57-4.94-5.74-5.17-.17-.23-1.37-1.82-1.37-3.47 0-1.65.87-2.46 1.18-2.8.31-.34.68-.43.9-.43.22 0 .45 0 .65.01.21.01.5-.08.78.6.27.68.92 2.34 1 2.51.08.17.13.37.02.6-.11.23-.17.37-.34.57-.17.2-.36.45-.51.6-.17.17-.34.35-.15.69.19.34.84 1.39 1.8 2.25 1.24 1.11 2.29 1.46 2.63 1.63.34.17.54.15.74-.09.2-.24.85-.99 1.08-1.33.23-.34.46-.28.78-.17.31.11 1.97.93 2.31 1.1.34.17.57.26.65.4.08.14.08.81-.19 1.58z"
+        />
+      </svg>
+    </a>
+  </div>
 );
+
+/* Ítem de bitácora */
 
 const JournalEntryItem = ({ entry, userId }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -264,16 +323,176 @@ const JournalEntryItem = ({ entry, userId }) => {
   );
 };
 
-/* --- VISTA PRINCIPAL --- */
+/* ----- PROMPTS PARA GEMINI ----- */
+
+function buildGeminiPrompt(
+  userMessage,
+  profileData,
+  messages,
+  hoursSinceLastMsg,
+  currentTopic,
+) {
+  const lastExchanges = messages
+    .slice(-8)
+    .map((m) => `${m.role === 'user' ? 'FAMILIA' : 'CONECTAPP'}: ${m.content}`)
+    .join('\n');
+
+  const tiempoTexto =
+    hoursSinceLastMsg == null
+      ? 'No se sabe cuánto tiempo pasó.'
+      : hoursSinceLastMsg < 2
+      ? 'Pasó poco tiempo desde el último mensaje.'
+      : `Pasaron aproximadamente ${Math.round(
+          hoursSinceLastMsg,
+        )} horas desde el último mensaje.`;
+
+  const topicText = currentTopic
+    ? `Tema actual declarado por la familia: "${currentTopic}".`
+    : 'No hay un tema declarado, interpreta según el mensaje.';
+
+  return `
+Eres ConectApp, un acompañante digital para familias neurodivergentes.
+
+ESTILO:
+- Hablas en español neutro, sin marcar género (usa expresiones como "quien cuida", "la persona cuidadora", "tu peque", "la familia").
+- Evita asumir si la persona es mamá, papá, hombre o mujer.
+- Tono cercano, empático y claro, como un chat de WhatsApp.
+- No das diagnósticos médicos ni reemplazas a profesionales.
+
+DINÁMICA DE CONVERSACIÓN:
+- Imagina que estás siguiendo una conversación continua.
+- Responde de forma natural al mensaje actual, sin repetir siempre la misma estructura.
+- Normalmente:
+  - Primero valida la emoción en 1 frase breve.
+  - Luego conversa: haz 1–2 preguntas sencillas o da hasta 3 ideas prácticas si ayudan.
+- Puedes usar viñetas o numeración SOLO cuando tenga sentido (no siempre).
+- No escribas más de 12 líneas en total.
+- Si notas que ya han hablado mucho rato, puedes recordar brevemente que eres una herramienta de apoyo y no reemplazas a profesionales.
+
+NOCIÓN DE TIEMPO:
+${tiempoTexto}
+- Si pasaron MÁS de 2 horas y el mensaje parece retomar un tema (por ejemplo: "como te conté antes", "sigamos", etc.), empieza preguntando suavemente si la persona quiere:
+  - seguir con la conversación anterior, o
+  - hablar de algo nuevo.
+
+${topicText}
+
+CONTEXTO DE LA FAMILIA:
+- Persona cuidadora: ${profileData.caregiverFirstName || 'quien cuida'} ${
+    profileData.caregiverLastName || ''
+  }
+- Ser querido neurodivergente: ${
+    profileData.neuroName || profileData.patientName || 'tu peque'
+  }
+- Edad aproximada: ${profileData.age || 'no indicada'}
+- Sensibilidades: ${
+    profileData.sensorySensitivities || 'aún no se han descrito'
+  }
+- Cosas que le calman: ${
+    profileData.calmingStrategies || 'todavía no se han registrado'
+  }
+
+HISTORIAL RECIENTE:
+${lastExchanges || 'Sin mensajes previos relevantes.'}
+
+MENSAJE ACTUAL DE LA FAMILIA:
+"${userMessage}"
+
+RESPUESTA:
+Responde siguiendo TODO lo anterior, de forma simple, empática y práctica.
+`;
+}
+
+/* Detección de título para bitácora según contenido y tema */
+function detectJournalTitle(text, currentTopic) {
+  const lower = text.toLowerCase();
+
+  if (currentTopic && currentTopic.length > 0) {
+    if (lower.includes('plan') || lower.includes('paso')) {
+      return `Plan de acción sobre ${currentTopic}`;
+    }
+    if (lower.includes('idea') || lower.includes('puedes probar')) {
+      return `Ideas prácticas para ${currentTopic}`;
+    }
+  }
+
+  if (lower.includes('plan') || lower.includes('paso')) {
+    return 'Plan de acción sugerido';
+  }
+  if (lower.includes('logro') || lower.includes('mejoró')) {
+    return 'Progreso / logro destacado';
+  }
+  if (lower.includes('resumen')) {
+    return 'Resumen de la conversación';
+  }
+
+  return 'Registro de conversación';
+}
+
+/* Prompt para mini resumen del día */
+function buildDaySummaryPrompt(messages, profileData) {
+  const condensed = messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .slice(-30)
+    .map((m) => `${m.role === 'user' ? 'FAMILIA' : 'CONECTAPP'}: ${m.content}`)
+    .join('\n');
+
+  return `
+Eres ConectApp, un acompañante digital para familias neurodivergentes.
+
+Quiero que hagas un mini resumen del día para la familia cuidadora.
+
+Contexto:
+- Persona cuidadora: ${profileData.caregiverFirstName || 'quien cuida'} ${
+    profileData.caregiverLastName || ''
+  }
+- Ser querido neurodivergente: ${
+    profileData.neuroName || profileData.patientName || 'tu peque'
+  }
+
+Mensajes recientes del día:
+${condensed || 'No hay mucha conversación hoy.'}
+
+Tu tarea:
+- Escribe de 4 a 6 líneas máximo.
+- Usa lenguaje simple y neutro.
+- Incluye:
+  1) Cómo estuvo en general el tono emocional (por ejemplo: tenso, cansado, más tranquilo, etc.).
+  2) Una idea que pareció útil o que vale la pena repetir.
+  3) Una cosa concreta para probar mañana o en los próximos días.
+
+No uses formato muy formal, escribe como un resumen breve para la familia.
+`;
+}
+
+/* ----- COMPONENTE PRINCIPAL ----- */
 
 export default function ConectApp() {
   const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerPasswordConfirm, setRegisterPasswordConfirm] = useState('');
+  const [caregiverFirstName, setCaregiverFirstName] = useState('');
+  const [caregiverLastName, setCaregiverLastName] = useState('');
+  const [neuroName, setNeuroName] = useState('');
+
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
   const [activeTab, setActiveTab] = useState('chat');
-  const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSafetyAlert, setShowSafetyAlert] = useState(false);
 
   const [profileData, setProfileData] = useState({
+    caregiverFirstName: '',
+    caregiverLastName: '',
+    neuroName: '',
     patientName: '',
     age: '',
     diagnosisLevel: 'Necesito orientación inicial',
@@ -289,37 +508,36 @@ export default function ConectApp() {
     {
       role: 'system',
       content:
-        'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte, entenderte y buscar juntos las mejores estrategias para tu familia. ¿Cómo te sientes hoy?',
+        'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte, entenderte y buscar juntos estrategias simples para tu familia. ¿Cómo te sientes hoy?',
     },
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
   const [journalEntries, setJournalEntries] = useState([]);
+  const [currentTopic, setCurrentTopic] = useState('');
+  const [daySummaryLoading, setDaySummaryLoading] = useState(false);
 
   const messagesEndRef = useRef(null);
 
+  /* --- EFECTO: escuchar cambios de autenticación --- */
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error('Error en login anónimo:', err);
-      }
-    };
-    initAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser || null);
+      setAuthChecked(true);
+      setAuthError('');
     });
     return () => unsubscribe();
   }, []);
 
+  /* --- EFECTO: cargar perfil y bitácora cuando hay usuario --- */
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setJournalEntries([]);
+      return;
+    }
 
-    const docRef = doc(
+    const profileRef = doc(
       db,
       'artifacts',
       appId,
@@ -328,9 +546,21 @@ export default function ConectApp() {
       'data',
       'profile',
     );
-    const unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
+    const unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
       if (docSnap.exists()) {
-        setProfileData((prev) => ({ ...prev, ...docSnap.data() }));
+        const data = docSnap.data();
+        setProfileData((prev) => ({
+          ...prev,
+          ...data,
+        }));
+
+        setCaregiverFirstName(
+          (prev) => prev || data.caregiverFirstName || '',
+        );
+        setCaregiverLastName((prev) => prev || data.caregiverLastName || '');
+        setNeuroName(
+          (prev) => prev || data.neuroName || data.patientName || '',
+        );
       }
     });
 
@@ -354,9 +584,146 @@ export default function ConectApp() {
     };
   }, [user]);
 
+  /* --- EFECTO: hacer scroll al final del chat --- */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, activeTab]);
+
+  /* --- AUTENTICACIÓN --- */
+
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    if (!loginEmail || !loginPassword) return;
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+    } catch (err) {
+      console.error(err);
+      setAuthError('Revisa tu correo y contraseña.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+
+    if (
+      !registerEmail ||
+      !registerPassword ||
+      !registerPasswordConfirm ||
+      !caregiverFirstName ||
+      !neuroName
+    ) {
+      setAuthError('Completa los datos principales antes de continuar.');
+      return;
+    }
+
+    if (registerPassword !== registerPasswordConfirm) {
+      setAuthError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const cred = await createUserWithEmailAndPassword(
+        auth,
+        registerEmail.trim(),
+        registerPassword,
+      );
+
+      const profileRef = doc(
+        db,
+        'artifacts',
+        appId,
+        'users',
+        cred.user.uid,
+        'data',
+        'profile',
+      );
+      await setDoc(
+        profileRef,
+        {
+          caregiverFirstName,
+          caregiverLastName,
+          neuroName,
+          patientName: neuroName,
+          email: registerEmail.trim(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setAuthMode('login');
+      setLoginEmail(registerEmail.trim());
+      setLoginPassword('');
+      setAuthError('');
+    } catch (err) {
+      console.error(err);
+      setAuthError('No pudimos crear tu cuenta. Intenta de nuevo.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const userCred = result.user;
+
+      const profileRef = doc(
+        db,
+        'artifacts',
+        appId,
+        'users',
+        userCred.uid,
+        'data',
+        'profile',
+      );
+      await setDoc(
+        profileRef,
+        {
+          email: userCred.email || '',
+          caregiverFirstName: userCred.displayName
+            ? userCred.displayName.split(' ')[0]
+            : '',
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      console.error(err);
+      setAuthError('No pudimos iniciar sesión con Google.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setAuthError('');
+    if (!loginEmail.trim()) {
+      setAuthError(
+        'Escribe tu correo arriba para poder enviarte el enlace de recuperación.',
+      );
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, loginEmail.trim());
+      setAuthError(
+        'Te enviamos un correo para recuperar tu contraseña. Revisa tu bandeja de entrada o spam.',
+      );
+    } catch (err) {
+      console.error(err);
+      setAuthError(
+        'No pudimos enviar el correo de recuperación. Revisa el correo o intenta más tarde.',
+      );
+    }
+  };
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -364,10 +731,13 @@ export default function ConectApp() {
       {
         role: 'system',
         content:
-          'Hola. Soy tu acompañante en ConectApp. ¿Cómo te sientes hoy?',
+          'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte. ¿Cómo te sientes hoy?',
       },
     ]);
     setProfileData({
+      caregiverFirstName: '',
+      caregiverLastName: '',
+      neuroName: '',
       patientName: '',
       age: '',
       diagnosisLevel: 'Necesito orientación inicial',
@@ -377,7 +747,10 @@ export default function ConectApp() {
       triggers: '',
       calmingStrategies: '',
     });
+    setCurrentTopic('');
   };
+
+  /* --- PERFIL --- */
 
   const saveProfile = async () => {
     if (!user) return;
@@ -392,7 +765,17 @@ export default function ConectApp() {
         'data',
         'profile',
       );
-      await setDoc(docRef, profileData, { merge: true });
+      await setDoc(
+        docRef,
+        {
+          ...profileData,
+          caregiverFirstName,
+          caregiverLastName,
+          neuroName,
+          patientName: neuroName || profileData.patientName,
+        },
+        { merge: true },
+      );
       const btn = document.getElementById('save-btn');
       if (btn) {
         const originalText = btn.innerText;
@@ -409,13 +792,16 @@ export default function ConectApp() {
     }
   };
 
-  const saveJournalEntry = async (content) => {
+  const saveJournalEntry = async (
+    content,
+    title = 'Registro de conversación',
+  ) => {
     if (!user) return;
     try {
       await addDoc(
         collection(db, 'artifacts', appId, 'users', user.uid, 'journal'),
         {
-          title: 'Registro de Conversación',
+          title,
           content:
             content.substring(0, 300) + (content.length > 300 ? '...' : ''),
           fullContent: content,
@@ -429,6 +815,8 @@ export default function ConectApp() {
       console.error('Error saving journal:', error);
     }
   };
+
+  /* --- CHEQUEO DE SEGURIDAD --- */
 
   const checkSafety = (text) => {
     const dangerKeywords = [
@@ -450,48 +838,53 @@ export default function ConectApp() {
     return dangerKeywords.some((keyword) => lowerText.includes(keyword));
   };
 
+  /* --- ENVÍO DE MENSAJE / GEMINI --- */
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!inputMessage.trim()) return;
 
+    const now = Date.now();
+
+    const lastMsgWithTime = [...messages]
+      .reverse()
+      .find((m) => typeof m.timestamp === 'number');
+
+    let hoursSinceLastMsg = null;
+    if (lastMsgWithTime) {
+      const diffMs = now - lastMsgWithTime.timestamp;
+      hoursSinceLastMsg = diffMs / (1000 * 60 * 60);
+    }
+
     if (checkSafety(inputMessage)) {
-      setMessages((prev) => [...prev, { role: 'user', content: inputMessage }]);
-      setInputMessage('');
-      setShowSafetyAlert(true);
       setMessages((prev) => [
         ...prev,
+        { role: 'user', content: inputMessage, timestamp: now },
         {
           role: 'system',
           content:
             '⚠️ He detectado una situación de riesgo. Por favor, prioriza la seguridad física inmediata.',
+          timestamp: now,
         },
       ]);
+      setInputMessage('');
+      setShowSafetyAlert(true);
       return;
     }
 
-    const newMsg = { role: 'user', content: inputMessage };
+    const newMsg = { role: 'user', content: inputMessage, timestamp: now };
     setMessages((prev) => [...prev, newMsg]);
     setInputMessage('');
     setIsTyping(true);
 
     try {
-      const contextPrompt = `
-        Eres "ConectApp", un coach y acompañante especializado en familias neurodivergentes.
-        Tu tono es: Cálido, empático, contenedor emocionalmente.
-        
-        INSTRUCCIONES CLAVE:
-        1. Valida las emociones primero.
-        2. Usa la info del perfil (${profileData.patientName || 'el paciente'}).
-        3. Da respuestas estructuradas y útiles.
-        
-        CONTEXTO DEL PERFIL:
-        - Nombre: ${profileData.patientName}
-        - Edad: ${profileData.age}
-        - Calma: ${profileData.calmingStrategies}
-        - Sensibilidades: ${profileData.sensorySensitivities}
-
-        PREGUNTA DEL USUARIO: "${newMsg.content}"
-      `;
+      const contextPrompt = buildGeminiPrompt(
+        newMsg.content,
+        { ...profileData, caregiverFirstName, caregiverLastName, neuroName },
+        messages,
+        hoursSinceLastMsg,
+        currentTopic,
+      );
 
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 
@@ -502,6 +895,7 @@ export default function ConectApp() {
             role: 'assistant',
             content:
               'Por ahora no tengo acceso a mi modelo externo, pero estoy aquí para acompañarte. Cuéntame un poco más.',
+            timestamp: Date.now(),
           },
         ]);
         return;
@@ -521,12 +915,19 @@ export default function ConectApp() {
       const data = await response.json();
       const aiText =
         data.candidates?.[0]?.content?.parts?.[0]?.text ||
-        'Estoy aquí contigo, ¿puedes repetirlo?';
+        'Estoy aquí contigo, ¿puedes contarme un poco más?';
 
-      setMessages((prev) => [...prev, { role: 'assistant', content: aiText }]);
+      const assistantMsg = {
+        role: 'assistant',
+        content: aiText,
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, assistantMsg]);
 
       if (aiText.length > 150) {
-        saveJournalEntry(aiText);
+        const title = detectJournalTitle(aiText, currentTopic);
+        saveJournalEntry(aiText, title);
       }
     } catch (error) {
       console.error('AI Error:', error);
@@ -535,6 +936,7 @@ export default function ConectApp() {
         {
           role: 'assistant',
           content: 'Lo siento, mi conexión falló momentáneamente.',
+          timestamp: Date.now(),
         },
       ]);
     } finally {
@@ -542,42 +944,247 @@ export default function ConectApp() {
     }
   };
 
-  if (loading)
+  /* --- MINI RESUMEN DEL DÍA --- */
+
+  const handleGenerateDaySummary = async () => {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+    if (!apiKey) {
+      alert(
+        'Configura VITE_GEMINI_API_KEY en tu entorno para generar el mini resumen del día.',
+      );
+      return;
+    }
+
+    setDaySummaryLoading(true);
+    try {
+      const prompt = buildDaySummaryPrompt(messages, {
+        ...profileData,
+        caregiverFirstName,
+        caregiverLastName,
+        neuroName,
+      });
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        },
+      );
+
+      const data = await response.json();
+      const aiText =
+        data.candidates?.[0]?.content?.parts?.[0]?.text ||
+        'Hoy no tengo mucho que resumir, pero recuerda que cada pequeño esfuerzo cuenta.';
+
+      await saveJournalEntry(aiText, 'Mini resumen del día');
+    } catch (err) {
+      console.error(err);
+      alert('No pudimos generar el resumen. Intenta nuevamente más tarde.');
+    } finally {
+      setDaySummaryLoading(false);
+    }
+  };
+
+  /* --- RENDER: ESTADOS ESPECIALES --- */
+
+  if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-blue-600">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-blue-600">
         Cargando ConectApp...
       </div>
     );
+  }
+
+  /* --- PANTALLA DE LOGIN / REGISTRO --- */
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md border-0 shadow-xl">
-          <div className="text-center mb-8 pt-4">
-            <Logo className="w-24 h-24 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800">ConectApp</h1>
-            <p className="text-blue-600 font-medium mt-2">
-              Tu compañero en la neurodivergencia
-            </p>
-          </div>
-
-          <div className="space-y-6">
-            <div className="bg-blue-50 p-5 rounded-xl text-sm text-blue-800 border border-blue-100">
-              <p className="font-semibold mb-2">
-                Bienvenida familia neurodivergente.
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 px-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white/90 backdrop-blur rounded-3xl shadow-xl border border-slate-100 p-6 md:p-8 transform transition-transform duration-300">
+            <div className="flex flex-col items-center mb-6">
+              <Logo className="w-16 h-16 mb-3" />
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
+                ConectApp
+              </h1>
+              <p className="text-sm text-blue-600 mt-1">
+                Tu compañero en la neurodivergencia
               </p>
-              Este es un espacio seguro de contención, aprendizaje y apoyo
-              personalizado.
             </div>
 
-            <p className="text-center text-sm text-gray-500">
-              Estamos inicializando tu sesión...
+            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 text-xs md:text-sm text-blue-900 mb-4">
+              <p className="font-semibold">
+                Bienvenida familia neurodivergente.
+              </p>
+              <p className="mt-1">
+                Crea una cuenta para guardar la evolución de tu ser querido en
+                el tiempo.
+              </p>
+            </div>
+
+            <div className="flex mb-4 rounded-xl bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 text-sm rounded-lg transition-colors ${
+                  authMode === 'login'
+                    ? 'bg-white shadow-sm text-blue-700 font-semibold'
+                    : 'text-slate-500'
+                }`}
+              >
+                Iniciar sesión
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 text-sm rounded-lg transition-colors ${
+                  authMode === 'register'
+                    ? 'bg-white shadow-sm text-blue-700 font-semibold'
+                    : 'text-slate-500'
+                }`}
+              >
+                Crear cuenta
+              </button>
+            </div>
+
+            {authError && (
+              <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {authError}
+              </div>
+            )}
+
+            {authMode === 'login' ? (
+              <form onSubmit={handleEmailLogin} className="space-y-3 mb-4">
+                <Input
+                  label="Correo electrónico"
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="tucorreo@ejemplo.com"
+                />
+                <Input
+                  label="Contraseña"
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="********"
+                />
+
+                <div className="flex justify-end mb-1">
+                  <button
+                    type="button"
+                    onClick={handlePasswordReset}
+                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full justify-center py-2.5"
+                >
+                  {authLoading ? 'Ingresando...' : 'Iniciar sesión'}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-3 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Input
+                    label="Nombre"
+                    value={caregiverFirstName}
+                    onChange={(e) => setCaregiverFirstName(e.target.value)}
+                    placeholder="Tu nombre"
+                  />
+                  <Input
+                    label="Apellido"
+                    value={caregiverLastName}
+                    onChange={(e) => setCaregiverLastName(e.target.value)}
+                    placeholder="Tu apellido"
+                  />
+                </div>
+                <Input
+                  label="Nombre de tu ser querido neurodivergente"
+                  value={neuroName}
+                  onChange={(e) => setNeuroName(e.target.value)}
+                  placeholder="Ej. Mateo"
+                />
+                <Input
+                  label="Correo electrónico"
+                  type="email"
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  placeholder="tucorreo@ejemplo.com"
+                />
+                <Input
+                  label="Contraseña"
+                  type="password"
+                  value={registerPassword}
+                  onChange={(e) => setRegisterPassword(e.target.value)}
+                  placeholder="********"
+                />
+                <Input
+                  label="Repite la contraseña"
+                  type="password"
+                  value={registerPasswordConfirm}
+                  onChange={(e) =>
+                    setRegisterPasswordConfirm(e.target.value)
+                  }
+                  placeholder="********"
+                />
+
+                <Button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full justify-center py-2.5 mt-1"
+                >
+                  {authLoading ? 'Creando cuenta...' : 'Crear cuenta'}
+                </Button>
+              </form>
+            )}
+
+            {/* Botón estándar de Google */}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={authLoading}
+              className="w-full flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors mt-1"
+            >
+              <img
+                src="https://developers.google.com/identity/images/g-logo.png"
+                alt=""
+                className="w-4 h-4"
+              />
+              <span>
+                {authLoading
+                  ? 'Conectando con Google...'
+                  : 'Continuar con Google'}
+              </span>
+            </button>
+
+            <p className="mt-4 text-[10px] text-slate-400 text-center leading-relaxed">
+              Al continuar aceptas nuestros{' '}
+              <span className="underline">términos de servicio</span> y{' '}
+              <span className="underline">política de privacidad</span>.
             </p>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
+
+  /* --- VISTA PRINCIPAL --- */
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
@@ -589,7 +1196,7 @@ export default function ConectApp() {
               Protocolo de Seguridad Activado
             </h2>
             <p className="text-gray-700 mb-6">
-              Hemos detectado una situación de riesgo. Por favor, usa ayuda
+              Hemos detectado una situación de riesgo. Por favor, pide ayuda
               inmediata.
             </p>
             <div className="space-y-3">
@@ -615,9 +1222,16 @@ export default function ConectApp() {
       <aside className="hidden md:flex flex-col w-72 bg-white border-r border-gray-200 h-screen sticky top-0 shadow-lg z-10">
         <div className="p-6 border-b border-gray-100 flex items-center gap-3">
           <Logo className="w-8 h-8" />
-          <span className="font-bold text-xl text-gray-800 tracking-tight">
-            ConectApp
-          </span>
+          <div>
+            <span className="font-bold text-xl text-gray-800 tracking-tight block">
+              ConectApp
+            </span>
+            {profileData.caregiverFirstName && (
+              <span className="text-xs text-gray-500">
+                {profileData.caregiverFirstName} {profileData.caregiverLastName}
+              </span>
+            )}
+          </div>
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
@@ -641,7 +1255,7 @@ export default function ConectApp() {
             }`}
           >
             <User className="w-5 h-5" /> Perfil Familiar
-            {!profileData.patientName && (
+            {!profileData.neuroName && (
               <span className="w-2 h-2 bg-amber-400 rounded-full ml-auto animate-pulse" />
             )}
           </button>
@@ -660,7 +1274,7 @@ export default function ConectApp() {
 
         <div className="p-4 bg-gray-50 m-4 rounded-xl border border-gray-100">
           <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-            "Estamos construyendo comunidad."
+            “Estamos construyendo comunidad.”
           </p>
           <Button
             onClick={handleLogout}
@@ -676,7 +1290,16 @@ export default function ConectApp() {
       <header className="md:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-20 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-2">
           <Logo className="w-8 h-8" />
-          <span className="font-bold text-lg text-gray-800">ConectApp</span>
+          <div>
+            <span className="font-bold text-lg text-gray-800 block">
+              ConectApp
+            </span>
+            {profileData.caregiverFirstName && (
+              <span className="text-[11px] text-gray-500">
+                {profileData.caregiverFirstName} {profileData.caregiverLastName}
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -735,8 +1358,22 @@ export default function ConectApp() {
                   <h2 className="text-2xl font-bold text-gray-800">
                     Perfil Familiar
                   </h2>
-                  <p className="text-gray-500">
+                  <p className="text-gray-500 text-sm">
                     Ayúdame a conocer a quien cuidamos para ser un mejor apoyo.
+                  </p>
+                  <p className="mt-2 text-xs text-gray-400">
+                    Usuario:{' '}
+                    <span className="font-medium text-gray-600">
+                      {caregiverFirstName} {caregiverLastName}
+                    </span>
+                    {neuroName && (
+                      <>
+                        {' · '}Ser querido:{' '}
+                        <span className="font-medium text-blue-600">
+                          {neuroName}
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -761,7 +1398,7 @@ export default function ConectApp() {
                   </h3>
                   <p className="text-sm text-amber-800 mt-1">
                     Cuanta más información completes aquí, más personalizadas y
-                    útiles serán las estrategias que te proponga el coach.
+                    simples serán las estrategias que te proponga el coach.
                   </p>
                 </div>
               </div>
@@ -769,15 +1406,22 @@ export default function ConectApp() {
               <Card title="Datos Básicos" icon={User}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Input
+                    label="Tu nombre"
+                    placeholder="Ej. Francisca"
+                    value={caregiverFirstName}
+                    onChange={(e) => setCaregiverFirstName(e.target.value)}
+                  />
+                  <Input
+                    label="Tu apellido"
+                    placeholder="Ej. Pérez"
+                    value={caregiverLastName}
+                    onChange={(e) => setCaregiverLastName(e.target.value)}
+                  />
+                  <Input
                     label="Nombre de tu ser querido"
                     placeholder="Ej. Mateo"
-                    value={profileData.patientName}
-                    onChange={(e) =>
-                      setProfileData({
-                        ...profileData,
-                        patientName: e.target.value,
-                      })
-                    }
+                    value={neuroName}
+                    onChange={(e) => setNeuroName(e.target.value)}
                   />
                   <Input
                     label="Edad"
@@ -824,8 +1468,8 @@ export default function ConectApp() {
                   Estos detalles permiten que el coach conecte emocionalmente.
                 </p>
                 <Input
-                  label="Intereses Profundos (Sus pasiones)"
-                  placeholder="¿Qué le hace brillar los ojos? (Ej. Dinosaurios, trenes, el espacio...)"
+                  label="Intereses profundos (sus pasiones)"
+                  placeholder="¿Qué le hace brillar los ojos? (Ej. dinosaurios, trenes, el espacio...)"
                   textarea
                   value={profileData.specialInterests}
                   onChange={(e) =>
@@ -837,7 +1481,7 @@ export default function ConectApp() {
                 />
                 <Input
                   label="¿Qué cosas le calman o le hacen feliz?"
-                  placeholder="Ej. Presión fuerte, música clásica, saltar, dibujar..."
+                  placeholder="Ej. presión fuerte, música suave, saltar, dibujar..."
                   textarea
                   value={profileData.calmingStrategies}
                   onChange={(e) =>
@@ -849,10 +1493,10 @@ export default function ConectApp() {
                 />
               </Card>
 
-              <Card title="Desafíos y Sensibilidad" icon={AlertTriangle}>
+              <Card title="Desafíos y sensibilidad" icon={AlertTriangle}>
                 <Input
-                  label="Experiencias Sensoriales"
-                  placeholder="¿Qué le molesta? (Ruidos, etiquetas, luces, texturas de comida...)"
+                  label="Experiencias sensoriales"
+                  placeholder="¿Qué le molesta? (ruidos, etiquetas, luces, texturas de comida...)"
                   textarea
                   value={profileData.sensorySensitivities}
                   onChange={(e) =>
@@ -863,8 +1507,8 @@ export default function ConectApp() {
                   }
                 />
                 <Input
-                  label="Detonantes de Crisis"
-                  placeholder="¿Qué suele causar desregulación? (Cambios de rutina, hambre, 'no', sueño...)"
+                  label="Detonantes de crisis"
+                  placeholder="¿Qué suele causar desregulación? (cambios de rutina, hambre, 'no', sueño...)"
                   textarea
                   value={profileData.triggers}
                   onChange={(e) =>
@@ -875,7 +1519,7 @@ export default function ConectApp() {
                   }
                 />
                 <Input
-                  label="Forma de Comunicarse"
+                  label="Forma de comunicarse"
                   placeholder="¿Verbal, gestual, pictogramas, ecolalia?"
                   value={profileData.communicationStyle}
                   onChange={(e) =>
@@ -893,15 +1537,28 @@ export default function ConectApp() {
         {activeTab === 'evolution' && (
           <div className="h-full overflow-y-auto p-4 md:p-10 pb-32">
             <div className="max-w-4xl mx-auto">
-              <div className="flex items-center gap-3 mb-6">
-                <BookOpen className="w-6 h-6 text-blue-600" />
-                <h2 className="text-2xl font-bold text-gray-800">
-                  Bitácora de Evolución
-                </h2>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="w-6 h-6 text-blue-600" />
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    Bitácora de Evolución
+                  </h2>
+                </div>
+                <Button
+                  onClick={handleGenerateDaySummary}
+                  disabled={daySummaryLoading}
+                  className="w-full md:w-auto justify-center"
+                  variant="secondary"
+                >
+                  <Star className="w-4 h-4" />
+                  {daySummaryLoading
+                    ? 'Generando resumen...'
+                    : 'Mini resumen del día'}
+                </Button>
               </div>
-              <p className="text-gray-500 mb-8">
-                Aquí guardamos los hitos importantes de tus conversaciones.
-                Puedes agregar tus propias notas a cada registro.
+              <p className="text-gray-500 mb-8 text-sm">
+                Aquí guardamos los hitos importantes de tus conversaciones. El
+                mini resumen del día te ayuda a ver el panorama general.
               </p>
 
               {journalEntries.length === 0 ? (
@@ -929,7 +1586,7 @@ export default function ConectApp() {
 
         {activeTab === 'chat' && (
           <div className="h-full flex flex-col bg-white md:bg-gray-50">
-            {!profileData.patientName && (
+            {!neuroName && (
               <div className="bg-amber-50 border-b border-amber-100 p-3 text-center text-sm text-amber-800 flex items-center justify-center gap-2">
                 <span>
                   🌱 Para poder acompañarte mejor, cuéntame sobre tu familia.
@@ -943,7 +1600,41 @@ export default function ConectApp() {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+              {/* Chips de temas rápidos */}
+              <div className="mb-2">
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_TOPICS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setCurrentTopic(t.label);
+                        if (!inputMessage) {
+                          setInputMessage(t.suggestion);
+                        }
+                      }}
+                      className={`text-xs px-3 py-1 rounded-full border ${
+                        currentTopic === t.label
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {currentTopic && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Hablando sobre:{' '}
+                    <span className="font-medium text-gray-600">
+                      {currentTopic}
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              {/* Mensajes */}
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
@@ -952,8 +1643,8 @@ export default function ConectApp() {
                   }`}
                 >
                   {msg.role !== 'user' && (
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2 mt-1 shrink-0 text-blue-600">
-                      <Logo className="w-5 h-5" />
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2 mt-1 shrink-0 text-blue-600 overflow-hidden">
+                      <Logo className="w-7 h-7" />
                     </div>
                   )}
                   <div
@@ -985,7 +1676,8 @@ export default function ConectApp() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 bg-white border-t border-gray-100 md:m-4 md:rounded-2xl md:shadow-xl relative z-10">
+            {/* Input de mensaje */}
+            <div className="p-3 md:p-4 bg-white border-t border-gray-100 md:m-4 md:rounded-2xl md:shadow-xl relative z-10">
               <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
                 <textarea
                   value={inputMessage}
@@ -997,13 +1689,13 @@ export default function ConectApp() {
                     }
                   }}
                   placeholder="Cuéntame, ¿qué está pasando?..."
-                  className="flex-1 bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none max-h-32 min-h-[50px] placeholder:text-gray-400 text-gray-700"
+                  className="flex-1 bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none max-h-32 min-h-[50px] placeholder:text-gray-400 text-gray-700 text-sm md:text-base"
                   rows="1"
                 />
                 <Button
                   type="submit"
                   disabled={!inputMessage.trim() || isTyping}
-                  className="h-[50px] w-[50px] rounded-xl !px-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700"
+                  className="h-[48px] w-[48px] md:h-[50px] md:w-[50px] rounded-xl !px-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700"
                 >
                   <Send className="w-5 h-5 ml-0.5" />
                 </Button>
