@@ -651,8 +651,11 @@ export default function ConectApp() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50/50 px-4 animate-fade-in">
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-white">
-          <div className="text-center mb-8">
-            <Logo className="w-20 h-20 mx-auto mb-4" />
+            <div className="text-center mb-8">
+            {/* Logo envuelto en un div para controlar su tamaño (w-16 h-16 = 64px) */}
+            <div className="w-16 h-16 mx-auto mb-4">
+              <Logo />
+            </div>
             <h1 className="text-3xl font-bold text-slate-800">ConectApp</h1>
             <p className="text-blue-600 mt-1 font-medium">Acompañamiento para familias neurodivergentes</p>
           </div>
