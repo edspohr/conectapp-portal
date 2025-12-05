@@ -50,6 +50,12 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Info,
+  Lightbulb,
+  Heart,
+  Zap,
+  Shield,
+  Smile
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
@@ -66,10 +72,10 @@ const googleProvider = new GoogleAuthProvider();
 
 /* --- TEMAS RÁPIDOS --- */
 const QUICK_TOPICS = [
-  { id: 'rutinas', label: 'Rutinas de sueño', suggestion: 'Quiero hablar de las rutinas de sueño de mi ser querido.' },
-  { id: 'crisis', label: 'Crisis', suggestion: 'Necesito ideas para manejar las crisis y la desregulación.' },
-  { id: 'colegio', label: 'Colegio / social', suggestion: 'Quiero hablar sobre el colegio y la adaptación social.' },
-  { id: 'desahogo', label: 'Desahogo', suggestion: 'Sólo quiero desahogarme hoy. Ha sido un día intenso.' },
+  { id: 'rutinas', label: 'Rutinas', suggestion: 'Necesito ayuda para ajustar una rutina diaria.' },
+  { id: 'crisis', label: 'Crisis / Desregulación', suggestion: 'Estamos pasando por un momento de crisis/desregulación.' },
+  { id: 'social', label: 'Social', suggestion: 'Quiero hablar sobre situaciones sociales o escolares.' },
+  { id: 'desahogo', label: 'Desahogo', suggestion: 'Sólo quiero desahogarme, ha sido un día difícil.' },
 ];
 
 /* --- UTILIDADES --- */
@@ -91,6 +97,18 @@ const RichText = ({ text }) => {
 const formatTime = (timestamp) => {
   if (!timestamp) return '';
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const calculateAge = (birthDate) => {
+  if (!birthDate) return 'Edad desconocida';
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return `${age} años`;
 };
 
 /* --- COMPONENTES UI --- */
@@ -115,9 +133,21 @@ const Button = ({ children, onClick, variant = 'primary', className = '', disabl
   );
 };
 
-const Input = ({ label, value, onChange, placeholder, type = 'text', textarea = false, error, rightElement }) => (
+const Input = ({ label, value, onChange, placeholder, type = 'text', textarea = false, error, rightElement, icon: Icon, helpText }) => (
   <div className="mb-5 relative">
-    {label && <label className={`block text-sm font-semibold mb-1.5 ml-1 ${error ? 'text-red-500' : 'text-gray-700'}`}>{label}</label>}
+    <div className="flex items-center gap-2 mb-1.5 ml-1">
+      {Icon && <Icon className="w-4 h-4 text-blue-600" />}
+      {label && <label className={`block text-sm font-semibold ${error ? 'text-red-500' : 'text-gray-700'}`}>{label}</label>}
+      {helpText && (
+        <div className="group relative cursor-help">
+          <Info className="w-3.5 h-3.5 text-gray-400" />
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-800 text-white text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+            {helpText}
+          </div>
+        </div>
+      )}
+    </div>
+    
     {textarea ? (
       <textarea className={`w-full px-4 py-3 border rounded-xl focus:ring-2 outline-none transition-all min-h-[100px] resize-none ${error ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 bg-gray-50/50 focus:bg-white focus:ring-blue-500/20 focus:border-blue-500'}`} value={value} onChange={onChange} placeholder={placeholder} />
     ) : (
@@ -131,7 +161,7 @@ const Input = ({ label, value, onChange, placeholder, type = 'text', textarea = 
 );
 
 const Card = ({ children, title, icon: Icon }) => (
-  <div className="bg-white rounded-2xl shadow-sm border border-gray-100/80 overflow-hidden">
+  <div className="bg-white rounded-2xl shadow-sm border border-gray-100/80 overflow-hidden h-full">
     {(title || Icon) && (
       <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-2 bg-gray-50/30">
         {Icon && <Icon className="w-5 h-5 text-blue-600" />}
@@ -279,30 +309,54 @@ const JournalEntryItem = ({ entry, userId, onNoteSaved }) => {
   );
 };
 
-/* ----- PROMPT IA ----- */
+/* ----- PROMPT IA AVANZADO ----- */
 function buildGeminiPrompt(userMessage, profileData, messages, hoursSinceLastMsg, currentTopic) {
-  const contextWindow = messages.slice(-20);
+  const contextWindow = messages.slice(-15); // Contexto más corto para enfocar
   const lastExchanges = contextWindow.map(m => `${m.role === 'user' ? 'FAMILIA' : 'CONECTAPP'}: ${m.content}`).join('\n');
   const tiempoTexto = hoursSinceLastMsg == null ? 'No se sabe cuánto tiempo pasó.' : hoursSinceLastMsg < 2 ? 'Pasó poco tiempo desde el último mensaje.' : `Pasaron aproximadamente ${Math.round(hoursSinceLastMsg)} horas desde el último mensaje.`;
-  const topicText = currentTopic ? `Tema actual declarado: "${currentTopic}".` : 'No hay un tema declarado.';
+  const topicText = currentTopic ? `Tema declarado por usuario: "${currentTopic}".` : 'Tema libre.';
+
+  const edadTexto = calculateAge(profileData.birthDate);
+  const interests = profileData.specialInterests ? profileData.specialInterests : 'No especificados';
 
   return `
-Eres ConectApp, un Coach experto en acompañamiento para familias neurodivergentes.
-OBJETIVO: Brindar apoyo, contención emocional y estrategias prácticas con absoluta solidez y calma profesional.
-PERSONALIDAD: Resolutiva, tranquila, experta. Transmite confianza sin usar frases de descargo ("no soy médico"). Demuestra experiencia con el contenido.
-FORMATO: Responde breve y directo (máx 4-6 frases). Usa negritas (**texto**) para conceptos clave. Usa listas solo si hay pasos prácticos.
-CONTEXTO:
-- Cuidador/a: ${profileData.caregiverFirstName || 'quien cuida'}
-- Ser querido: ${profileData.neuroName || 'el ser querido'} (${profileData.age || '?'})
-- Diagnóstico: ${profileData.diagnosisLevel}
-- Sensibilidades: ${profileData.sensorySensitivities || 'No especificadas'}
-- Calma: ${profileData.calmingStrategies || 'No especificadas'}
+Eres ConectApp, un Copiloto Experto en Neurodivergencia y Crianza Respetuosa.
+Tu misión es acompañar a ${profileData.caregiverFirstName || 'el cuidador/a'} en la crianza de ${profileData.neuroName || 'su ser querido'}, quien tiene ${edadTexto}.
+
+--- PERFIL DE ${profileData.neuroName || 'SER QUERIDO'} ---
+- Diagnóstico/Perfil: ${profileData.diagnosis || 'No especificado'}
+- Estilo de Comunicación: ${profileData.communicationStyle || 'No especificado'}
+- Hipersensibilidades (Evita): ${profileData.hypersensitivities || 'No especificado'}
+- Hiposensibilidades (Busca): ${profileData.hyposensitivities || 'No especificado'}
+- Intereses Profundos (SpIns): ${interests}
+- Desencadenantes (Triggers): ${profileData.triggers || 'No especificado'}
+- Estrategias de Calma: ${profileData.calmingStrategies || 'No especificado'}
+- Fortalezas: ${profileData.strengths || 'No especificado'}
+- Nivel de Energía: ${profileData.energyLevel || 'No especificado'}
+- Desafío Actual: ${profileData.mainChallenge || 'No especificado'}
+
+--- PAUTAS DE INTERACCIÓN (DINÁMICA CONVERSACIONAL) ---
+1. **ESTRUCTURA DE RESPUESTA:**
+   - **Paso 1: VALIDAR.** Empieza validando la emoción del cuidador (ej. "Entiendo que es agotador...").
+   - **Paso 2: ANALIZAR.** Conecta la situación con el Perfil (ej. "Quizás el ruido activó su hipersensibilidad...").
+   - **Paso 3: PROPONER.** Da UNA o DOS micro-estrategias concretas. No hagas listas largas.
+
+2. **USO DE METÁFORAS:**
+   - Usa los **Intereses Profundos** (${interests}) para explicar conceptos o proponer soluciones lúdicas si aplica. (Ej: Si le gustan los trenes, usa analogías de "vías", "estaciones" o "señales").
+
+3. **ENFOQUE AFIRMATIVO:**
+   - Habla de "necesidades de apoyo" en lugar de "déficits".
+   - Busca la co-regulación. Ajusta tus consejos a la edad de ${edadTexto}.
+
+--- CONTEXTO ACTUAL ---
 TIEMPO: ${tiempoTexto}
 TEMA: ${topicText}
-HISTORIAL:
+HISTORIAL RECIENTE:
 ${lastExchanges}
+
 MENSAJE ACTUAL: "${userMessage}"
-Responde con empatía resolutiva.
+
+Responde con calidez, brevedad y profesionalismo.
 `;
 }
 
@@ -332,8 +386,24 @@ export default function ConectApp() {
   const [showSafetyAlert, setShowSafetyAlert] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '' });
   
-  // Profile & Data
-  const [profileData, setProfileData] = useState({ caregiverFirstName: '', caregiverLastName: '', neuroName: '', patientName: '', age: '', diagnosisLevel: 'Necesito orientación inicial', communicationStyle: '', sensorySensitivities: '', specialInterests: '', triggers: '', calmingStrategies: '' });
+  // Profile & Data (Updated Structure)
+  const [profileData, setProfileData] = useState({ 
+    caregiverFirstName: '', 
+    caregiverLastName: '', 
+    neuroName: '', 
+    birthDate: '', // Nuevo campo
+    diagnosis: '', // Nuevo 10 campos
+    communicationStyle: '',
+    hypersensitivities: '',
+    hyposensitivities: '',
+    specialInterests: '',
+    triggers: '',
+    calmingStrategies: '',
+    strengths: '',
+    energyLevel: '',
+    mainChallenge: ''
+  });
+  
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -356,6 +426,7 @@ export default function ConectApp() {
     if (!userObj) return;
     const profileRef = doc(db, 'artifacts', appId, 'users', userObj.uid, 'data', 'profile');
     try {
+      // Solo actualizamos email/nombre si es login inicial, no sobrescribimos datos complejos aquí
       await setDoc(profileRef, { email: userObj.email || '', caregiverFirstName: userObj.displayName ? userObj.displayName.split(' ')[0] : '' }, { merge: true });
     } catch (e) { console.error(e); }
   };
@@ -430,7 +501,7 @@ export default function ConectApp() {
     return () => { unsubProfile(); unsubJournal(); };
   }, [user]);
 
-  // CHAT SYNC - Manejo de error de índice
+  // CHAT SYNC
   useEffect(() => {
     if (!user || !activeSessionId) return;
     const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'conversations'), where('sessionId', '==', activeSessionId), orderBy('createdAt', 'desc'), limit(100));
@@ -444,7 +515,6 @@ export default function ConectApp() {
         }).reverse());
       }
     }, (err) => {
-      // ESTE LOG ES CRÍTICO PARA EL USUARIO: Muestra el link de creación de índice
       console.error("🔥 ERROR FIRESTORE (Probable falta de índice). Copia este link en tu navegador:", err.message.match(/https:\/\/[^\s]+/)?.[0] || err);
     });
     return () => unsub();
@@ -513,10 +583,9 @@ export default function ConectApp() {
     e.preventDefault();
     if (!inputMessage.trim() || !user) return;
     
-    // Ocultar snippet al enviar también
     if (inputRef.current) inputRef.current.blur();
 
-    if (!activeSessionId) { /* Logic inside useEffect handles session creation mostly */ }
+    if (!activeSessionId) { /* Logic inside useEffect handles session creation */ }
 
     const now = Date.now();
     const lastMsg = messages.filter(m => m.role !== 'system').slice(-1)[0];
@@ -599,7 +668,7 @@ export default function ConectApp() {
               <Input label="Nombre Ser Querido" placeholder="Ej. Leo" value={neuroName} onChange={e => setNeuroName(e.target.value)} error={formErrors.neuroName} />
             </div>}
             <Input type="email" label="Correo" placeholder="correo@ejemplo.com" value={authMode === 'login' ? loginEmail : registerEmail} onChange={e => authMode === 'login' ? setLoginEmail(e.target.value) : setRegisterEmail(e.target.value)} error={formErrors.loginEmail || formErrors.registerEmail} />
-            <Input type={showPassword ? "text" : "password"} label="Contraseña" placeholder="********" value={authMode === 'login' ? loginPassword : registerPassword} onChange={e => authMode === 'login' ? setLoginPassword(e.target.value) : setRegisterPassword(e.target.value)} error={formErrors.loginPassword || formErrors.registerPassword} rightElement={<button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}</button>} />
+            <Input type={showPassword ? "text" : "password"} label="Contraseña" placeholder="********" value={authMode === 'login' ? loginPassword : registerPassword} onChange={e => authMode === 'login' ? setLoginPassword(e.target.value) : setLoginPassword(e.target.value)} error={formErrors.loginPassword || formErrors.registerPassword} rightElement={<button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}</button>} />
             {authMode === 'register' && <Input type="password" label="Confirmar" placeholder="********" value={registerPasswordConfirm} onChange={e => setRegisterPasswordConfirm(e.target.value)} error={formErrors.registerPasswordConfirm} />}
             {authMode === 'login' && <div className="flex justify-end mb-6"><button type="button" onClick={handlePasswordReset} className="text-xs text-blue-600 hover:underline">¿Olvidaste tu contraseña?</button></div>}
             <Button type="submit" disabled={authLoading} className="w-full py-3 mb-4">{authLoading ? 'Procesando...' : (authMode === 'login' ? 'Entrar' : 'Crear Cuenta')}</Button>
@@ -623,7 +692,85 @@ export default function ConectApp() {
       {mobileMenuOpen && <div className="fixed inset-0 bg-white z-20 pt-24 px-6 md:hidden flex flex-col gap-4"><button onClick={() => { setActiveTab('chat'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><MessageSquare /> Chat</button><button onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><User /> Perfil</button><button onClick={() => { setActiveTab('evolution'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><BookOpen /> Bitácora</button><Button onClick={handleLogout} variant="danger" className="mt-auto mb-8">Cerrar Sesión</Button></div>}
 
       <main className="flex-1 overflow-hidden relative h-[calc(100vh-64px)] md:h-screen bg-slate-50/50">
-        {activeTab === 'profile' && <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in"><div className="max-w-3xl mx-auto space-y-6"><div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Perfil</h2><Button onClick={async () => { setIsSavingProfile(true); try { await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'profile'), { ...profileData, caregiverFirstName, caregiverLastName, neuroName }, { merge: true }); showToast('Guardado'); } finally { setIsSavingProfile(false); } }} disabled={isSavingProfile}><Save className="w-4 h-4" /> Guardar</Button></div><Card title="Datos" icon={User}><div className="grid md:grid-cols-2 gap-4"><Input label="Tu Nombre" value={caregiverFirstName} onChange={e => setCaregiverFirstName(e.target.value)} /><Input label="Nombre Ser Querido" value={neuroName} onChange={e => setNeuroName(e.target.value)} /></div></Card><Card title="Detalles" icon={BrainCircuit}><Input textarea label="Intereses" value={profileData.specialInterests} onChange={e => setProfileData({ ...profileData, specialInterests: e.target.value })} /><Input textarea label="Calma" value={profileData.calmingStrategies} onChange={e => setProfileData({ ...profileData, calmingStrategies: e.target.value })} /></Card></div></div>}
+        
+        {/* --- PESTAÑA PERFIL MEJORADA --- */}
+        {activeTab === 'profile' && (
+          <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in">
+            <div className="max-w-4xl mx-auto space-y-8">
+              <div className="flex justify-between items-center sticky top-0 bg-slate-50/95 backdrop-blur z-10 py-4 -my-4 mb-2">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800">Perfil de Familia</h2>
+                  <p className="text-sm text-slate-500">Personaliza la experiencia para recibir mejor apoyo.</p>
+                </div>
+                <Button 
+                  onClick={async () => { 
+                    setIsSavingProfile(true); 
+                    try { 
+                      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'profile'), { 
+                        ...profileData, 
+                        caregiverFirstName, 
+                        caregiverLastName, 
+                        neuroName 
+                      }, { merge: true }); 
+                      showToast('Perfil actualizado correctamente'); 
+                    } finally { setIsSavingProfile(false); } 
+                  }} 
+                  disabled={isSavingProfile}
+                  className="shadow-lg shadow-blue-200"
+                >
+                  <Save className="w-4 h-4" /> {isSavingProfile ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+              </div>
+
+              <div className="grid md:grid-cols-1 gap-6">
+                {/* 1. DATOS BÁSICOS */}
+                <Card title="Datos Básicos" icon={User}>
+                  <div className="grid md:grid-cols-2 gap-5">
+                    <Input label="Tu Nombre (Cuidador/a)" value={caregiverFirstName} onChange={e => setCaregiverFirstName(e.target.value)} placeholder="¿Cómo te llamas?" />
+                    <Input label="Nombre de tu Ser Querido" value={neuroName} onChange={e => setNeuroName(e.target.value)} placeholder="Nombre o apodo" />
+                    <Input 
+                      type="date" 
+                      label="Fecha de Nacimiento (Ser Querido)" 
+                      value={profileData.birthDate} 
+                      onChange={e => setProfileData({ ...profileData, birthDate: e.target.value })} 
+                      helpText="Usamos esto para calcular la edad y adaptar los consejos."
+                    />
+                  </div>
+                </Card>
+
+                {/* 2. CONTEXTO NEURODIVERGENTE (10 SECCIONES) */}
+                <Card title="Contexto Neurodivergente" icon={BrainCircuit}>
+                  <p className="text-sm text-gray-500 mb-6 bg-blue-50 p-3 rounded-xl border border-blue-100 flex gap-2">
+                    <Info className="w-5 h-5 text-blue-600 shrink-0" />
+                    Completa estas secciones para que la IA entienda profundamente a tu ser querido y te dé consejos realmente personalizados.
+                  </p>
+                  
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <Input icon={BrainCircuit} textarea label="1. Diagnóstico / Perfil" placeholder="Ej. Autismo Nivel 1, TDAH, Dispraxia..." value={profileData.diagnosis} onChange={e => setProfileData({ ...profileData, diagnosis: e.target.value })} />
+                    <Input icon={MessageSquare} textarea label="2. Estilo de Comunicación" placeholder="Ej. Verbal fluido, Gestual, Uso de SAAC, Ecolalia..." value={profileData.communicationStyle} onChange={e => setProfileData({ ...profileData, communicationStyle: e.target.value })} />
+                    
+                    <Input icon={EyeOff} textarea label="3. Hipersensibilidades (Le molesta)" placeholder="Ej. Ruidos fuertes, etiquetas, luces brillantes..." value={profileData.hypersensitivities} onChange={e => setProfileData({ ...profileData, hypersensitivities: e.target.value })} />
+                    <Input icon={Eye} textarea label="4. Hiposensibilidades (Busca)" placeholder="Ej. Presión profunda, girar, morder objetos..." value={profileData.hyposensitivities} onChange={e => setProfileData({ ...profileData, hyposensitivities: e.target.value })} />
+                    
+                    <div className="md:col-span-2">
+                      <Input icon={Heart} textarea label="5. Intereses Profundos (SpIns)" placeholder="Ej. Dinosaurios, Trenes, Astronomía (¡Esto es clave para usar analogías!)" value={profileData.specialInterests} onChange={e => setProfileData({ ...profileData, specialInterests: e.target.value })} helpText="La IA usará estos temas para explicar cosas o proponer juegos." />
+                    </div>
+
+                    <Input icon={AlertTriangle} textarea label="6. Desencadenantes (Triggers)" placeholder="Ej. Cambios de rutina, Hambre, Sueño, Lugares concurridos..." value={profileData.triggers} onChange={e => setProfileData({ ...profileData, triggers: e.target.value })} />
+                    <Input icon={Smile} textarea label="7. Estrategias de Calma" placeholder="Ej. Co-regulación, Música, Tablet, Espacio tranquilo..." value={profileData.calmingStrategies} onChange={e => setProfileData({ ...profileData, calmingStrategies: e.target.value })} />
+                    
+                    <Input icon={Zap} textarea label="8. Fortalezas" placeholder="Ej. Memoria visual, Empatía con animales, Creatividad..." value={profileData.strengths} onChange={e => setProfileData({ ...profileData, strengths: e.target.value })} />
+                    <Input icon={Clock} textarea label="9. Nivel de Energía / Ritmo" placeholder="Ej. Muy activo/motor, o más pasivo/observador..." value={profileData.energyLevel} onChange={e => setProfileData({ ...profileData, energyLevel: e.target.value })} />
+                    
+                    <div className="md:col-span-2">
+                      <Input icon={Shield} textarea label="10. Desafío Actual Principal" placeholder="Ej. Control de esfínteres, Socialización, Agresividad..." value={profileData.mainChallenge} onChange={e => setProfileData({ ...profileData, mainChallenge: e.target.value })} />
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
         
         {activeTab === 'evolution' && <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in"><div className="max-w-3xl mx-auto"><h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><BookOpen className="text-blue-600" /> Bitácora</h2>{journalEntries.length === 0 ? <div className="text-center p-12 border-2 border-dashed rounded-3xl"><p className="text-gray-400">Sin registros.</p></div> : <div className="space-y-6">{journalEntries.map(e => <JournalEntryItem key={e.id} entry={e} userId={user.uid} onNoteSaved={() => showToast('Nota guardada')} />)}</div>}</div></div>}
 
