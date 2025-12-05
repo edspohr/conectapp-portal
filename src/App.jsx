@@ -28,7 +28,7 @@ import {
   orderBy,
   serverTimestamp,
   limit,
-  where,
+  // where, <- Eliminado porque ya no se usa
 } from 'firebase/firestore';
 
 import {
@@ -44,14 +44,12 @@ import {
   BrainCircuit,
   Edit3,
   Check,
-  Phone,
   Hand,
   Clock,
   ChevronDown,
   Eye,
   EyeOff,
   Info,
-  Lightbulb,
   Heart,
   Zap,
   Shield,
@@ -501,24 +499,34 @@ export default function ConectApp() {
     return () => { unsubProfile(); unsubJournal(); };
   }, [user]);
 
-  // CHAT SYNC
+  // CHAT SYNC - MODIFICADO PARA HISTORIAL CONTINUO (TIPO WHATSAPP)
   useEffect(() => {
-    if (!user || !activeSessionId) return;
-    const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'conversations'), where('sessionId', '==', activeSessionId), orderBy('createdAt', 'desc'), limit(100));
+    if (!user) return; // No necesitamos activeSessionId para leer, solo el usuario.
+    
+    // Eliminamos el filtro 'where("sessionId", "==", activeSessionId)'
+    // Esto asegura que carguemos todos los mensajes históricos, ordenados por fecha.
+    const q = query(
+      collection(db, 'artifacts', appId, 'users', user.uid, 'conversations'), 
+      orderBy('createdAt', 'desc'), 
+      limit(200) // Aumentamos el límite para tener más contexto histórico visible
+    );
+
     const unsub = onSnapshot(q, snap => {
       if (snap.empty) {
         setMessages([{ role: 'system', content: 'Hola. Soy tu acompañante en ConectApp. Estoy aquí para escucharte.' }]);
       } else {
         setMessages(snap.docs.map(d => {
           const dt = d.data();
-          return { ...dt, timestamp: dt.timestamp || (dt.createdAt?.seconds * 1000) || Date.now() };
-        }).reverse());
+          // Manejo seguro del timestamp por si viene null del servidor en escritura inmediata
+          const timestamp = dt.timestamp || (dt.createdAt?.seconds * 1000) || Date.now();
+          return { ...dt, timestamp };
+        }).reverse()); // Reverse para mostrar orden cronológico (antiguos arriba, nuevos abajo)
       }
     }, (err) => {
       console.error("🔥 ERROR FIRESTORE (Probable falta de índice). Copia este link en tu navegador:", err.message.match(/https:\/\/[^\s]+/)?.[0] || err);
     });
     return () => unsub();
-  }, [user, activeSessionId]);
+  }, [user]); // Quitamos activeSessionId de las dependencias
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isTyping, activeTab]);
 
@@ -585,6 +593,7 @@ export default function ConectApp() {
     
     if (inputRef.current) inputRef.current.blur();
 
+    // Mantenemos la lógica de activeSessionId solo para escritura y metadatos
     if (!activeSessionId) { /* Logic inside useEffect handles session creation */ }
 
     const now = Date.now();
@@ -596,6 +605,7 @@ export default function ConectApp() {
     }
 
     const newMsg = { role: 'user', content: inputMessage, timestamp: now };
+    // Optimistic UI update
     setMessages(p => [...p, newMsg]);
     setInputMessage('');
     if(inputRef.current) inputRef.current.style.height = 'auto'; // Reset height
@@ -603,17 +613,18 @@ export default function ConectApp() {
 
     try {
       const msgsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'conversations');
+      // Guardamos el sessionId para trazabilidad, aunque ya no filtramos por él al leer
       await addDoc(msgsRef, { ...newMsg, createdAt: serverTimestamp(), sessionId: activeSessionId });
       await updateLastInteraction();
 
-      const prompt = buildGeminiPrompt(newMsg.content, { ...profileData, caregiverFirstName, neuroName }, messages, hoursSince, currentTopic);
+      const HZPrompt = buildGeminiPrompt(newMsg.content, { ...profileData, caregiverFirstName, neuroName }, messages, hoursSince, currentTopic);
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error('API Key faltante');
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: HZPrompt }] }] }),
       });
 
       if (!res.ok) throw new Error('Error API');
@@ -621,6 +632,7 @@ export default function ConectApp() {
       const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Estoy aquí contigo.';
       const aiMsg = { role: 'assistant', content: aiText, timestamp: Date.now() };
       
+      // Optimistic UI update (será sobrescrito por el onSnapshot cuando llegue del servidor)
       setMessages(prev => [...prev, aiMsg]);
       await addDoc(msgsRef, { ...aiMsg, createdAt: serverTimestamp(), sessionId: activeSessionId });
       await updateLastInteraction();
@@ -671,7 +683,9 @@ export default function ConectApp() {
               <Input label="Nombre Ser Querido" placeholder="Ej. Leo" value={neuroName} onChange={e => setNeuroName(e.target.value)} error={formErrors.neuroName} />
             </div>}
             <Input type="email" label="Correo" placeholder="correo@ejemplo.com" value={authMode === 'login' ? loginEmail : registerEmail} onChange={e => authMode === 'login' ? setLoginEmail(e.target.value) : setRegisterEmail(e.target.value)} error={formErrors.loginEmail || formErrors.registerEmail} />
-            <Input type={showPassword ? "text" : "password"} label="Contraseña" placeholder="********" value={authMode === 'login' ? loginPassword : registerPassword} onChange={e => authMode === 'login' ? setLoginPassword(e.target.value) : setLoginPassword(e.target.value)} error={formErrors.loginPassword || formErrors.registerPassword} rightElement={<button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}</button>} />
+            <Input type={showPassword ? "text" : "password"} label="Contraseña" placeholder="********" value={authMode === 'login' ? loginPassword : registerPassword} 
+            onChange={e => authMode === 'login' ? setLoginPassword(e.target.value) : setRegisterPassword(e.target.value)} 
+            error={formErrors.loginPassword || formErrors.registerPassword} rightElement={<button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="w-5 h-5"/> : <Eye className="w-5 h-5"/>}</button>} />
             {authMode === 'register' && <Input type="password" label="Confirmar" placeholder="********" value={registerPasswordConfirm} onChange={e => setRegisterPasswordConfirm(e.target.value)} error={formErrors.registerPasswordConfirm} />}
             {authMode === 'login' && <div className="flex justify-end mb-6"><button type="button" onClick={handlePasswordReset} className="text-xs text-blue-600 hover:underline">¿Olvidaste tu contraseña?</button></div>}
             <Button type="submit" disabled={authLoading} className="w-full py-3 mb-4">{authLoading ? 'Procesando...' : (authMode === 'login' ? 'Entrar' : 'Crear Cuenta')}</Button>
