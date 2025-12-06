@@ -28,7 +28,6 @@ import {
   orderBy,
   serverTimestamp,
   limit,
-  // where, <- Eliminado porque ya no se usa
 } from 'firebase/firestore';
 
 import {
@@ -50,10 +49,12 @@ import {
   Eye,
   EyeOff,
   Info,
+  Lightbulb,
   Heart,
   Zap,
   Shield,
-  Smile
+  Smile,
+  ArrowRight
 } from 'lucide-react';
 
 /* --- CONFIGURACIÓN FIREBASE --- */
@@ -418,6 +419,9 @@ export default function ConectApp() {
     setToast({ visible: true, message });
     setTimeout(() => setToast({ visible: false, message: '' }), 3000);
   };
+
+  // Helper para verificar perfil incompleto
+  const isProfileIncomplete = !profileData.neuroName || !profileData.diagnosis || !profileData.birthDate;
 
   /* --- UTILS --- */
   const upsertUserProfile = async (userObj) => {
@@ -791,7 +795,60 @@ export default function ConectApp() {
         
         {activeTab === 'evolution' && <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in"><div className="max-w-3xl mx-auto"><h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><BookOpen className="text-blue-600" /> Bitácora</h2>{journalEntries.length === 0 ? <div className="text-center p-12 border-2 border-dashed rounded-3xl"><p className="text-gray-400">Sin registros.</p></div> : <div className="space-y-6">{journalEntries.map(e => <JournalEntryItem key={e.id} entry={e} userId={user.uid} onNoteSaved={() => showToast('Nota guardada')} />)}</div>}</div></div>}
 
-        {activeTab === 'chat' && <div className="h-full flex flex-col bg-slate-50 animate-fade-in"><div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-thin"><div className="flex gap-2 flex-wrap justify-center mb-6">{QUICK_TOPICS.map(t => <button key={t.id} onClick={() => { setCurrentTopic(t.label); setInputMessage(t.suggestion); inputRef.current?.focus(); }} className="text-xs px-4 py-2 bg-white border rounded-full hover:bg-blue-50 shadow-sm">{t.label}</button>)}</div>{messages.map((msg, i) => <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>{msg.role !== 'user' && <div className="w-10 h-10 rounded-full bg-white border mr-3 p-1.5 flex items-center justify-center shrink-0"><Logo /></div>}<div className={`max-w-[85%] p-4 rounded-2xl shadow-sm text-sm leading-relaxed group relative ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-gray-700 rounded-bl-sm'}`}><RichText text={msg.content} /><div className="text-[10px] mt-1 opacity-60 text-right flex items-center justify-end gap-1">{msg.role === 'assistant' && <Clock className="w-3 h-3" />}{formatTime(msg.timestamp)}</div>{msg.role === 'assistant' && <div className="mt-2 pt-2 border-t border-gray-100/30 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={handleSaveMilestone} className="text-xs flex gap-1 items-center bg-white/20 hover:bg-white/40 px-2 py-1 rounded text-current"><Save className="w-3 h-3" /> Guardar hito</button></div>}</div></div>)}{isTyping && <TypingIndicator />}<div ref={messagesEndRef} className="h-4" /></div><div className="p-4 bg-white/80 backdrop-blur-md border-t relative z-20"><form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end"><textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0"><Send className="w-6 h-6 ml-0.5" /></Button></form></div></div>}
+        {activeTab === 'chat' && (
+          <div className="h-full flex flex-col bg-slate-50 animate-fade-in relative">
+            
+            {/* 1. BANNER DE PERFIL INCOMPLETO */}
+            {isProfileIncomplete && (
+              <div className="bg-amber-50 border-b border-amber-100 p-4 flex items-start gap-3 shadow-sm z-10 shrink-0">
+                <div className="bg-amber-100 p-2 rounded-full text-amber-600 shrink-0">
+                  <Lightbulb className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-amber-800">¡Completa tu perfil para mejores resultados!</h4>
+                  <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                    La IA puede darte consejos mucho más precisos si conoce el diagnóstico, edad e intereses de tu ser querido.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setActiveTab('profile')} 
+                  className="text-xs font-bold bg-amber-200 text-amber-800 px-4 py-2 rounded-xl hover:bg-amber-300 transition-colors shadow-sm active:scale-95 flex items-center gap-1"
+                >
+                  Completar <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-thin">
+              <div className="flex gap-2 flex-wrap justify-center mb-6">{QUICK_TOPICS.map(t => <button key={t.id} onClick={() => { setCurrentTopic(t.label); setInputMessage(t.suggestion); inputRef.current?.focus(); }} className="text-xs px-4 py-2 bg-white border rounded-full hover:bg-blue-50 shadow-sm">{t.label}</button>)}</div>
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role !== 'user' && <div className="w-10 h-10 rounded-full bg-white border mr-3 p-1.5 flex items-center justify-center shrink-0"><Logo /></div>}
+                  <div className={`max-w-[85%] p-4 rounded-2xl shadow-sm text-sm leading-relaxed group relative ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-gray-700 rounded-bl-sm'}`}>
+                    <RichText text={msg.content} />
+                    <div className="text-[10px] mt-1 opacity-60 text-right flex items-center justify-end gap-1">{msg.role === 'assistant' && <Clock className="w-3 h-3" />}{formatTime(msg.timestamp)}</div>
+                    
+                    {/* 2. BOTÓN GUARDAR MEJORADO */}
+                    {msg.role === 'assistant' && (
+                      <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end">
+                        <button 
+                          onClick={handleSaveMilestone} 
+                          className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wide transition-all duration-300 hover:shadow-md active:scale-95 group border border-indigo-100"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                          <span>Guardar en Bitácora</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {isTyping && <TypingIndicator />}
+              <div ref={messagesEndRef} className="h-4" />
+            </div>
+            <div className="p-4 bg-white/80 backdrop-blur-md border-t relative z-20"><form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end"><textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0"><Send className="w-6 h-6 ml-0.5" /></Button></form></div>
+          </div>
+        )}
         
         {/* WhatsApp Button hides when typing (input has text) or focused */}
         <WhatsAppButton hidden={inputMessage.length > 0 || (inputRef.current && document.activeElement === inputRef.current)} />
