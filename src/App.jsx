@@ -57,6 +57,10 @@ import {
   ArrowRight
 } from 'lucide-react';
 
+import DailyTracker from './components/DailyTracker';
+import VisualSchedule from './components/VisualSchedule';
+import ClinicalReport from './components/ClinicalReport';
+
 /* --- CONFIGURACIÓN FIREBASE --- */
 const firebaseConfig = JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG || '{}');
 const app = initializeApp(firebaseConfig);
@@ -70,12 +74,7 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const googleProvider = new GoogleAuthProvider();
 
 /* --- TEMAS RÁPIDOS --- */
-const QUICK_TOPICS = [
-  { id: 'rutinas', label: 'Rutinas', suggestion: 'Necesito ayuda para ajustar una rutina diaria.' },
-  { id: 'crisis', label: 'Crisis / Desregulación', suggestion: 'Estamos pasando por un momento de crisis/desregulación.' },
-  { id: 'social', label: 'Social', suggestion: 'Quiero hablar sobre situaciones sociales o escolares.' },
-  { id: 'desahogo', label: 'Desahogo', suggestion: 'Sólo quiero desahogarme, ha sido un día difícil.' },
-];
+
 
 /* --- UTILIDADES --- */
 const RichText = ({ text }) => {
@@ -359,7 +358,7 @@ Responde con calidez, brevedad y profesionalismo.
 `;
 }
 
-/* ----- COMPONENTE PRINCIPAL ----- */
+  /* --- COMPONENTE PRINCIPAL ----- */
 export default function ConectApp() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -408,7 +407,6 @@ export default function ConectApp() {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [journalEntries, setJournalEntries] = useState([]);
-  const [currentTopic, setCurrentTopic] = useState('');
   const [activeSessionId, setActiveSessionId] = useState(null);
   
   const messagesEndRef = useRef(null);
@@ -621,7 +619,7 @@ export default function ConectApp() {
       await addDoc(msgsRef, { ...newMsg, createdAt: serverTimestamp(), sessionId: activeSessionId });
       await updateLastInteraction();
 
-      const HZPrompt = buildGeminiPrompt(newMsg.content, { ...profileData, caregiverFirstName, neuroName }, messages, hoursSince, currentTopic);
+      const HZPrompt = buildGeminiPrompt(newMsg.content, { ...profileData, caregiverFirstName, neuroName }, messages, hoursSince, '');
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error('API Key faltante');
 
@@ -708,9 +706,9 @@ export default function ConectApp() {
       {showSafetyAlert && <div className="fixed inset-0 z-[100] bg-red-900/90 flex items-center justify-center p-4"><div className="bg-white p-8 rounded-3xl text-center max-w-sm"><AlertTriangle className="w-10 h-10 text-red-600 mx-auto mb-2" /><h2 className="text-xl font-bold text-red-700 mb-2">Alerta de Seguridad</h2><p className="mb-4 text-gray-600">Detectamos riesgo. Pide ayuda.</p><a href="tel:133" className="block w-full bg-red-600 text-white py-3 rounded-xl font-bold mb-3">Llamar Emergencias</a><button onClick={() => setShowSafetyAlert(false)} className="underline text-gray-500">Estoy bien</button></div></div>}
       
       {/* SIDEBAR & HEADER */}
-      <aside className="hidden md:flex flex-col w-72 bg-white border-r h-screen sticky top-0 z-20"><div className="p-6 border-b flex items-center gap-3"><div className="w-9 h-9"><Logo /></div><span className="font-bold text-xl">ConectApp</span></div><nav className="flex-1 p-4 space-y-2"><button onClick={() => setActiveTab('chat')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><MessageSquare /> Chat</button><button onClick={() => setActiveTab('profile')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><User /> Perfil</button><button onClick={() => setActiveTab('evolution')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'evolution' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><BookOpen /> Bitácora</button></nav><div className="p-4 border-t"><Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-red-500"><LogOut className="w-4 h-4 mr-2" /> Salir</Button></div></aside>
+      <aside className="hidden md:flex flex-col w-72 bg-white border-r h-screen sticky top-0 z-20"><div className="p-6 border-b flex items-center gap-3"><div className="w-9 h-9"><Logo /></div><span className="font-bold text-xl">ConectApp</span></div><nav className="flex-1 p-4 space-y-2"><button onClick={() => setActiveTab('chat')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><MessageSquare /> Chat</button><button onClick={() => setActiveTab('schedule')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'schedule' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><Clock /> Rutina</button><button onClick={() => setActiveTab('profile')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><User /> Perfil</button><button onClick={() => setActiveTab('evolution')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'evolution' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><BookOpen /> Bitácora</button></nav><div className="p-4 border-t"><Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-red-500"><LogOut className="w-4 h-4 mr-2" /> Salir</Button></div></aside>
       <header className="md:hidden bg-white/80 backdrop-blur-md border-b p-4 sticky top-0 z-30 flex justify-between items-center"><div className="flex items-center gap-2"><div className="w-8 h-8"><Logo /></div><span className="font-bold text-lg">ConectApp</span></div><button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2"><Menu /></button></header>
-      {mobileMenuOpen && <div className="fixed inset-0 bg-white z-20 pt-24 px-6 md:hidden flex flex-col gap-4"><button onClick={() => { setActiveTab('chat'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><MessageSquare /> Chat</button><button onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><User /> Perfil</button><button onClick={() => { setActiveTab('evolution'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><BookOpen /> Bitácora</button><Button onClick={handleLogout} variant="danger" className="mt-auto mb-8">Cerrar Sesión</Button></div>}
+      {mobileMenuOpen && <div className="fixed inset-0 bg-white z-20 pt-24 px-6 md:hidden flex flex-col gap-4"><button onClick={() => { setActiveTab('chat'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><MessageSquare /> Chat</button><button onClick={() => { setActiveTab('schedule'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><Clock /> Rutina</button><button onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><User /> Perfil</button><button onClick={() => { setActiveTab('evolution'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><BookOpen /> Bitácora</button><Button onClick={handleLogout} variant="danger" className="mt-auto mb-8">Cerrar Sesión</Button></div>}
 
       <main className="flex-1 overflow-hidden relative h-[calc(100vh-64px)] md:h-screen bg-slate-50/50">
         
@@ -792,8 +790,31 @@ export default function ConectApp() {
             </div>
           </div>
         )}
+
+        {/* --- PESTAÑA RUTINA --- */}
+        {activeTab === 'schedule' && (
+          <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in">
+             <div className="max-w-full md:max-w-6xl mx-auto h-full">
+               <VisualSchedule db={db} appId={appId} userId={user.uid} />
+             </div>
+          </div>
+        )}
         
-        {activeTab === 'evolution' && <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in"><div className="max-w-3xl mx-auto"><h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><BookOpen className="text-blue-600" /> Bitácora</h2>{journalEntries.length === 0 ? <div className="text-center p-12 border-2 border-dashed rounded-3xl"><p className="text-gray-400">Sin registros.</p></div> : <div className="space-y-6">{journalEntries.map(e => <JournalEntryItem key={e.id} entry={e} userId={user.uid} onNoteSaved={() => showToast('Nota guardada')} />)}</div>}</div></div>}
+        {activeTab === 'evolution' && (
+          <div className="h-full overflow-y-auto p-4 md:p-10 pb-32 animate-fade-in">
+            <div className="max-w-3xl mx-auto space-y-8">
+              <h2 className="text-2xl font-bold flex items-center gap-2"><BookOpen className="text-blue-600" /> Bitácora</h2>
+              
+              <ClinicalReport db={db} appId={appId} userId={user.uid} profileName={neuroName} />
+              
+              {journalEntries.length === 0 ? (
+                <div className="text-center p-12 border-2 border-dashed rounded-3xl"><p className="text-gray-400">Sin registros.</p></div>
+              ) : (
+                <div className="space-y-6">{journalEntries.map(e => <JournalEntryItem key={e.id} entry={e} userId={user.uid} onNoteSaved={() => showToast('Nota guardada')} />)}</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {activeTab === 'chat' && (
           <div className="h-full flex flex-col bg-slate-50 animate-fade-in relative">
@@ -820,7 +841,6 @@ export default function ConectApp() {
             )}
 
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-thin">
-              <div className="flex gap-2 flex-wrap justify-center mb-6">{QUICK_TOPICS.map(t => <button key={t.id} onClick={() => { setCurrentTopic(t.label); setInputMessage(t.suggestion); inputRef.current?.focus(); }} className="text-xs px-4 py-2 bg-white border rounded-full hover:bg-blue-50 shadow-sm">{t.label}</button>)}</div>
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.role !== 'user' && <div className="w-10 h-10 rounded-full bg-white border mr-3 p-1.5 flex items-center justify-center shrink-0"><Logo /></div>}
@@ -846,7 +866,9 @@ export default function ConectApp() {
               {isTyping && <TypingIndicator />}
               <div ref={messagesEndRef} className="h-4" />
             </div>
-            <div className="p-4 bg-white/80 backdrop-blur-md border-t relative z-20"><form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end"><textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0"><Send className="w-6 h-6 ml-0.5" /></Button></form></div>
+            <div className="p-4 bg-white/80 backdrop-blur-md border-t relative z-20 pb-2">
+              <DailyTracker db={db} appId={appId} userId={user.uid} onSaved={() => showToast('Día registrado')} />
+              <form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end"><textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0"><Send className="w-6 h-6 ml-0.5" /></Button></form></div>
           </div>
         )}
         
