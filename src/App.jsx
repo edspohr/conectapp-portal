@@ -184,23 +184,56 @@ const TypingIndicator = () => (
   </div>
 );
 
-/* WhatsApp Button: Se oculta al escribir */
 const WhatsAppButton = ({ hidden }) => {
   const [showSnippet, setShowSnippet] = useState(true);
   const snippetVisible = showSnippet && !hidden;
 
   return (
-    <div className={`fixed right-4 bottom-24 md:bottom-28 flex flex-col items-end gap-2 z-40 transition-all duration-500 ${hidden ? 'translate-y-20 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
-      <div className={`relative px-4 py-3 text-[11px] md:text-xs bg-white/90 backdrop-blur-md border border-blue-100 rounded-xl shadow-lg text-slate-600 max-w-[200px] md:max-w-xs transition-all duration-300 origin-bottom-right ${snippetVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none absolute'}`}>
-        <button onClick={() => setShowSnippet(false)} className="absolute -top-2 -right-2 bg-white text-gray-400 hover:text-red-500 rounded-full p-0.5 border border-gray-100 shadow-sm"><X className="w-3 h-3" /></button>
-        <span className="font-bold text-slate-800 block mb-0.5">¿Necesitas ayuda humana?</span>
-        <span>Escríbenos por WhatsApp.</span>
+    <div className={`fixed left-5 bottom-4 z-50 transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${hidden ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
+      
+      {/* Mensaje flotante (Tooltip) */}
+      <div className={`
+        absolute bottom-full left-0 mb-3 ml-1 w-64 p-4 
+        bg-white/95 backdrop-blur-xl border border-white/20 shadow-2xl rounded-2xl rounded-bl-sm
+        transform transition-all duration-500 origin-bottom-left
+        ${snippetVisible ? 'opacity-100 scale-100 translate-x-0' : 'opacity-0 scale-90 -translate-x-4 pointer-events-none'}
+      `}>
+        <div className="flex justify-between items-start mb-1">
+          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Soporte Humano</span>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setShowSnippet(false); }} 
+            className="text-slate-400 hover:text-slate-600 p-1 -mr-2 -mt-2 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <p className="text-slate-600 text-sm leading-relaxed">
+          ¿Dudas con la plataforma? Escríbenos directo.
+        </p>
       </div>
-      <a href="https://wa.me/56965863160" target="_blank" rel="noopener noreferrer" className="group relative w-14 h-14 md:w-16 md:h-16 rounded-full shadow-xl shadow-green-200 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-2xl focus:outline-none focus:ring-4 focus:ring-green-100">
-        <span className="absolute inset-0 rounded-full bg-gradient-to-br from-green-400 via-green-500 to-emerald-500 opacity-90 group-hover:opacity-100 transition-opacity"></span>
-        <span className="absolute inset-[3px] rounded-full bg-white/10 backdrop-blur"></span>
-        <img src="/img/WhatsApp.webp" alt="WhatsApp" className="relative w-7 h-7 md:w-8 md:h-8 object-contain drop-shadow" />
-        <span className="absolute -bottom-6 text-[10px] font-semibold text-emerald-600 bg-white px-2 py-1 rounded-full shadow-sm border border-emerald-100 opacity-0 group-hover:opacity-100 transition-opacity">WhatsApp</span>
+
+      {/* Botón Principal */}
+      <a 
+        href="https://wa.me/56965863160" 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="group relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 active:scale-95 transition-transform duration-200"
+      >
+        {/* Ondas de pulso */}
+        <span className="absolute inset-0 rounded-full bg-green-500 opacity-20 animate-ping duration-[2s]"></span>
+        <span className="absolute inset-0 rounded-full bg-green-400 opacity-20 animate-pulse duration-[3s]"></span>
+        
+        {/* Fondo con gradiente y sombra */}
+        <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-green-600 to-emerald-400 shadow-[0_8px_30px_rgba(34,197,94,0.4)] group-hover:shadow-[0_15px_40px_rgba(34,197,94,0.6)] transition-shadow duration-300"></div>
+        
+        {/* Icono */}
+        <div className="relative z-10 p-3.5 md:p-4">
+          <img src="/img/WhatsApp.webp" alt="WhatsApp" className="w-full h-full object-contain drop-shadow-md brightness-0 invert group-hover:invert-0 group-hover:brightness-100 transition-all duration-300" style={{ filter: 'brightness(0) invert(1)' }} />
+          {/* Fallback visual trick: img might be colored normally, using filter to make it white then color on hover if needed, or just keep it white for clean look */}
+        </div>
+
+        {/* Badge "Online" */}
+        <span className="absolute top-0 right-0 w-4 h-4 bg-green-400 border-[3px] border-white rounded-full z-20"></span>
       </a>
     </div>
   );
@@ -619,19 +652,24 @@ export default function ConectApp() {
       await addDoc(msgsRef, { ...newMsg, createdAt: serverTimestamp(), sessionId: activeSessionId });
       await updateLastInteraction();
 
-      const HZPrompt = buildGeminiPrompt(newMsg.content, { ...profileData, caregiverFirstName, neuroName }, messages, hoursSince, '');
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('API Key faltante');
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
+      const fullPrompt = buildGeminiPrompt(newMsg.content, { ...profileData, caregiverFirstName, neuroName }, messages, hoursSince, '');
+      /*
+       * CALL SERVERLESS API (SECURE)
+       */
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: HZPrompt }] }] }),
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }]
+        })
       });
 
-      if (!res.ok) throw new Error('Error API');
-      const data = await res.json();
-      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Estoy aquí contigo.';
+      if (!response.ok) {
+        throw new Error('Error en el servidor de chat');
+      }
+
+      const data = await response.json();
+      const aiText = data.result || 'Estoy aquí contigo.';
       const aiMsg = { role: 'assistant', content: aiText, timestamp: Date.now() };
       
       // Optimistic UI update (será sobrescrito por el onSnapshot cuando llegue del servidor)
