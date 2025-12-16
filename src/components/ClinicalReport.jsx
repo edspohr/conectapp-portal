@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, Download, Copy, RefreshCw, AlertTriangle, Check } from 'lucide-react';
-import { collection, query, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, where } from 'firebase/firestore';
 
 const ClinicalReport = ({ db, appId, userId, profileName }) => {
   const [loading, setLoading] = useState(false);
@@ -14,25 +14,31 @@ const ClinicalReport = ({ db, appId, userId, profileName }) => {
     setReport('');
 
     try {
-      // 1. Fetch Data
+      // 1. Fetch Data with Optimized Query
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - range);
 
-      // Daily Logs
+      // Daily Logs - Optimized: Filter by date in Firestore
       const logsRef = collection(db, 'artifacts', appId, 'users', userId, 'daily_logs');
-      const logsQ = query(logsRef, orderBy('createdAt', 'desc'), limit(100)); // Simple fetch then filter client side for ease
+      // NOTA: Esto requiere un índice compuesto en Firestore (createdAt DESC + range filter)
+      // Si falla, revisa la consola del navegador para el link de creación del índice.
+      const logsQ = query(
+        logsRef, 
+        where('createdAt', '>=', startDate),
+        orderBy('createdAt', 'desc')
+      ); 
       const logsSnap = await getDocs(logsQ);
-      const logs = logsSnap.docs
-        .map(d => d.data())
-        .filter(d => d.createdAt && d.createdAt.toDate() >= startDate);
+      const logs = logsSnap.docs.map(d => d.data());
 
-      // Journal Milestones
+      // Journal Milestones - Optimized
       const journalRef = collection(db, 'artifacts', appId, 'users', userId, 'journal');
-      const journalQ = query(journalRef, orderBy('createdAt', 'desc'), limit(50));
+      const journalQ = query(
+        journalRef, 
+        where('createdAt', '>=', startDate),
+        orderBy('createdAt', 'desc')
+      );
       const journalSnap = await getDocs(journalQ);
-      const journal = journalSnap.docs
-        .map(d => d.data())
-        .filter(d => d.createdAt && d.createdAt.toDate() >= startDate);
+      const journal = journalSnap.docs.map(d => d.data());
 
       // 2. Prepare Prompt Data
       const logSummary = logs.map(l => `- ${l.date}: Estado ${l.mood} (${l.factors.join(', ')})`).join('\n');
@@ -49,10 +55,7 @@ const ClinicalReport = ({ db, appId, userId, profileName }) => {
         ${journalSummary || 'No hay hitos registrados.'}
       `;
 
-      // 3. Call AI
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("Falta API Key");
-
+      // 3. Call AI via Secure Serverless Function
       const systemPrompt = `
         Actúa como un Asistente Clínico Experto. Escribe un REPORTE CLÍNICO RESUMIDO para un Neurólogo/Psiquiatra.
         Usa lenguaje formal, médico y objetivo.
@@ -65,22 +68,27 @@ const ClinicalReport = ({ db, appId, userId, profileName }) => {
         No inventes datos. Si no hay suficiente información, indícalo.
       `;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      // Request to local API (Vercel/Node environment)
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt + "\n\nDATOS A ANALIZAR:\n" + promptData }] }]
+          promptData,
+          systemPrompt
         })
       });
 
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error en el servidor al generar reporte');
+      }
+
       const data = await response.json();
-      if (!data.candidates || !data.candidates[0].content) throw new Error("Error generando reporte");
-      
-      setReport(data.candidates[0].content.parts[0].text);
+      setReport(data.result);
 
     } catch (err) {
       console.error(err);
-      setError('Error al generar el reporte. Intenta nuevamente.');
+      setError('Error al generar el reporte. ' + err.message);
     } finally {
       setLoading(false);
     }
