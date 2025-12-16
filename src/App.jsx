@@ -186,29 +186,45 @@ const TypingIndicator = () => (
 
 const WhatsAppButton = ({ hidden }) => {
   const [showSnippet, setShowSnippet] = useState(true);
-  const snippetVisible = showSnippet && !hidden;
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Auto-hide snippet after 15 seconds to be less intrusive
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSnippet(false), 15000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
-    <div className={`fixed left-5 bottom-4 z-50 transition-all duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${hidden ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
+    <div 
+      className={`fixed right-5 bottom-5 md:right-8 md:bottom-8 z-[60] flex flex-col items-end gap-3 transition-all duration-700 cubic-bezier(0.34, 1.56, 0.64, 1) ${hidden ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       
-      {/* Mensaje flotante (Tooltip) */}
+      {/* Mensaje flotante (Tooltip) Mejorado */}
       <div className={`
-        absolute bottom-full left-0 mb-3 ml-1 w-64 p-4 
-        bg-white/95 backdrop-blur-xl border border-white/20 shadow-2xl rounded-2xl rounded-bl-sm
-        transform transition-all duration-500 origin-bottom-left
-        ${snippetVisible ? 'opacity-100 scale-100 translate-x-0' : 'opacity-0 scale-90 -translate-x-4 pointer-events-none'}
+        absolute bottom-full right-0 mb-3 w-64 p-4 
+        bg-white/90 backdrop-blur-md border border-white/50 shadow-xl rounded-2xl rounded-br-sm
+        transform transition-all duration-500 origin-bottom-right
+        ${showSnippet ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}
       `}>
-        <div className="flex justify-between items-start mb-1">
-          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Soporte Humano</span>
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+            </span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Soporte Humano</span>
+          </div>
           <button 
             onClick={(e) => { e.stopPropagation(); setShowSnippet(false); }} 
-            className="text-slate-400 hover:text-slate-600 p-1 -mr-2 -mt-2 transition-colors"
+            className="text-slate-300 hover:text-slate-500 p-1 -mr-2 -mt-2 transition-colors rounded-full hover:bg-slate-100/50"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <p className="text-slate-600 text-sm leading-relaxed">
-          ¿Dudas con la plataforma? Escríbenos directo.
+        <p className="text-slate-600 text-sm leading-relaxed font-medium">
+          ¿Hola! 👋 ¿Tienes alguna duda? Estamos aquí para ayudarte.
         </p>
       </div>
 
@@ -217,23 +233,30 @@ const WhatsAppButton = ({ hidden }) => {
         href="https://wa.me/56965863160" 
         target="_blank" 
         rel="noopener noreferrer" 
-        className="group relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 active:scale-95 transition-transform duration-200"
+        className="group relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 transition-transform duration-300 hover:-translate-y-1 hover:scale-105 active:scale-95"
       >
-        {/* Ondas de pulso */}
-        <span className="absolute inset-0 rounded-full bg-green-500 opacity-20 animate-ping duration-[2s]"></span>
-        <span className="absolute inset-0 rounded-full bg-green-400 opacity-20 animate-pulse duration-[3s]"></span>
+        {/* Efecto de 'Resplandor' trasero */}
+        <div className={`absolute inset-0 rounded-full bg-green-500/30 blur-xl transition-opacity duration-500 ${isHovered ? 'opacity-100' : 'opacity-0'}`}></div>
+
+        {/* Ondas sutiles */}
+        <span className="absolute inset-0 rounded-full border border-green-500/30 opacity-0 animate-ping duration-[3s]"></span>
         
-        {/* Fondo con gradiente y sombra */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-green-600 to-emerald-400 shadow-[0_8px_30px_rgba(34,197,94,0.4)] group-hover:shadow-[0_15px_40px_rgba(34,197,94,0.6)] transition-shadow duration-300"></div>
+        {/* Contenedor del Botón */}
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#25D366] to-[#075E54] shadow-[0_8px_25px_-5px_rgba(37,211,102,0.5)] group-hover:shadow-[0_15px_35px_-5px_rgba(37,211,102,0.6)] transition-all duration-300 border border-white/20"></div>
         
-        {/* Icono */}
-        <div className="relative z-10 p-3.5 md:p-4">
-          <img src="/img/WhatsApp.webp" alt="WhatsApp" className="w-full h-full object-contain drop-shadow-md brightness-0 invert group-hover:invert-0 group-hover:brightness-100 transition-all duration-300" style={{ filter: 'brightness(0) invert(1)' }} />
-          {/* Fallback visual trick: img might be colored normally, using filter to make it white then color on hover if needed, or just keep it white for clean look */}
+        {/* Icono Container */}
+        <div className="relative z-10 p-3.5 md:p-4 w-full h-full flex items-center justify-center">
+          <img 
+            src="/img/WhatsApp.webp" 
+            alt="WhatsApp" 
+            className="w-full h-full object-contain drop-shadow-sm filter brightness-0 invert" 
+          />
         </div>
 
-        {/* Badge "Online" */}
-        <span className="absolute top-0 right-0 w-4 h-4 bg-green-400 border-[3px] border-white rounded-full z-20"></span>
+        {/* Badge de Notificación */}
+        <span className="absolute top-0 right-0 md:top-1 md:right-1 w-4 h-4 bg-red-500 border-[2.5px] border-white rounded-full z-20 flex items-center justify-center animate-bounce duration-[2000ms]">
+          <span className="sr-only">1 new message</span>
+        </span>
       </a>
     </div>
   );
