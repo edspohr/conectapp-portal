@@ -184,83 +184,7 @@ const TypingIndicator = () => (
   </div>
 );
 
-const WhatsAppButton = ({ hidden }) => {
-  const [showSnippet, setShowSnippet] = useState(true);
-  const [isHovered, setIsHovered] = useState(false);
 
-  // Auto-hide snippet after 15 seconds to be less intrusive
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSnippet(false), 15000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <div 
-      className={`fixed right-5 bottom-5 md:right-8 md:bottom-8 z-[60] hidden md:flex flex-col items-end gap-3 transition-all duration-700 cubic-bezier(0.34, 1.56, 0.64, 1) ${hidden ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      
-      {/* Mensaje flotante (Tooltip) Mejorado */}
-      <div className={`
-        absolute bottom-full right-0 mb-3 w-64 p-4 
-        bg-white/90 backdrop-blur-md border border-white/50 shadow-xl rounded-2xl rounded-br-sm
-        transform transition-all duration-500 origin-bottom-right
-        ${showSnippet ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}
-      `}>
-        <div className="flex justify-between items-start mb-2">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-            </span>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Soporte Humano</span>
-          </div>
-          <button 
-            onClick={(e) => { e.stopPropagation(); setShowSnippet(false); }} 
-            className="text-slate-300 hover:text-slate-500 p-1 -mr-2 -mt-2 transition-colors rounded-full hover:bg-slate-100/50"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <p className="text-slate-600 text-sm leading-relaxed font-medium">
-          ¿Hola! 👋 ¿Tienes alguna duda? Estamos aquí para ayudarte.
-        </p>
-      </div>
-
-      {/* Botón Principal */}
-      <a 
-        href="https://wa.me/56965863160" 
-        target="_blank" 
-        rel="noopener noreferrer" 
-        className="group relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 transition-transform duration-300 hover:-translate-y-1 hover:scale-105 active:scale-95"
-      >
-        {/* Efecto de 'Resplandor' trasero */}
-        <div className={`absolute inset-0 rounded-full bg-green-500/30 blur-xl transition-opacity duration-500 ${isHovered ? 'opacity-100' : 'opacity-0'}`}></div>
-
-        {/* Ondas sutiles */}
-        <span className="absolute inset-0 rounded-full border border-green-500/30 opacity-0 animate-ping duration-[3s]"></span>
-        
-        {/* Contenedor del Botón */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#25D366] to-[#075E54] shadow-[0_8px_25px_-5px_rgba(37,211,102,0.5)] group-hover:shadow-[0_15px_35px_-5px_rgba(37,211,102,0.6)] transition-all duration-300 border border-white/20"></div>
-        
-        {/* Icono Container */}
-        <div className="relative z-10 p-3.5 md:p-4 w-full h-full flex items-center justify-center">
-          <img 
-            src="/img/WhatsApp.webp" 
-            alt="WhatsApp" 
-            className="w-full h-full object-contain drop-shadow-sm filter brightness-0 invert" 
-          />
-        </div>
-
-        {/* Badge de Notificación */}
-        <span className="absolute top-0 right-0 md:top-1 md:right-1 w-4 h-4 bg-red-500 border-[2.5px] border-white rounded-full z-20 flex items-center justify-center animate-bounce duration-[2000ms]">
-          <span className="sr-only">1 new message</span>
-        </span>
-      </a>
-    </div>
-  );
-};
 
 /* Ítem de bitácora */
 const JournalEntryItem = ({ entry, userId, onNoteSaved }) => {
@@ -767,21 +691,37 @@ export default function ConectApp() {
       {showSafetyAlert && <div className="fixed inset-0 z-[100] bg-red-900/90 flex items-center justify-center p-4"><div className="bg-white p-8 rounded-3xl text-center max-w-sm"><AlertTriangle className="w-10 h-10 text-red-600 mx-auto mb-2" /><h2 className="text-xl font-bold text-red-700 mb-2">Alerta de Seguridad</h2><p className="mb-4 text-gray-600">Detectamos riesgo. Pide ayuda.</p><a href="tel:133" className="block w-full bg-red-600 text-white py-3 rounded-xl font-bold mb-3">Llamar Emergencias</a><button onClick={() => setShowSafetyAlert(false)} className="underline text-gray-500">Estoy bien</button></div></div>}
       
       {/* SIDEBAR & HEADER */}
-      <aside className="hidden md:flex flex-col w-72 bg-white border-r h-screen sticky top-0 z-20"><div className="p-6 border-b flex items-center gap-3"><div className="w-9 h-9"><Logo /></div><span className="font-bold text-xl">ConectApp</span></div><nav className="flex-1 p-4 space-y-2"><button onClick={() => setActiveTab('chat')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><MessageSquare /> Chat</button><button onClick={() => setActiveTab('schedule')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'schedule' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><Clock /> Rutina</button><button onClick={() => setActiveTab('profile')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><User /> Perfil</button><button onClick={() => setActiveTab('evolution')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'evolution' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><BookOpen /> Bitácora</button></nav><div className="p-4 border-t"><Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-red-500"><LogOut className="w-4 h-4 mr-2" /> Salir</Button></div></aside>
+      <aside className="hidden md:flex flex-col w-72 bg-white border-r h-screen sticky top-0 z-20"><div className="p-6 border-b flex items-center gap-3"><div className="w-9 h-9"><Logo /></div><span className="font-bold text-xl">ConectApp</span></div><nav className="flex-1 p-4 space-y-2"><button onClick={() => setActiveTab('chat')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><MessageSquare /> Chat</button><button onClick={() => setActiveTab('schedule')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'schedule' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><Clock /> Rutina</button><button onClick={() => setActiveTab('profile')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><User /> Perfil</button><button onClick={() => setActiveTab('evolution')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'evolution' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><BookOpen /> Bitácora</button></nav>
+        <div className="p-4 border-t space-y-2">
+          {/* WhatsApp Sidebar Button */}
+          <a 
+            href="https://wa.me/56965863160" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="w-full h-11 px-4 rounded-xl flex items-center justify-start gap-3 text-slate-600 hover:bg-green-50 hover:text-green-700 transition-all group font-medium"
+          >
+            <div className="w-5 h-5 relative">
+              <img src="/img/WhatsApp.webp" alt="WA" className="w-full h-full object-contain filter grayscale group-hover:grayscale-0 transition-all opacity-70 group-hover:opacity-100" />
+            </div>
+            Soporte Humano
+          </a>
+          <Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-red-500"><LogOut className="w-4 h-4 mr-2" /> Salir</Button>
+        </div>
+      </aside>
       <header className="md:hidden bg-white/80 backdrop-blur-md border-b p-4 sticky top-0 z-30 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8"><Logo /></div>
           <span className="font-bold text-lg">ConectApp</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <a 
             href="https://wa.me/56965863160" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="p-2 mr-1 text-green-600 bg-green-50 rounded-full active:scale-95 transition-transform"
+            className="p-1.5 mr-1 text-green-600 bg-green-50 rounded-full active:scale-95 transition-transform"
             title="Soporte WhatsApp"
           >
-            <img src="/img/WhatsApp.webp" alt="WA" className="w-5 h-5 object-contain" />
+            <img src="/img/WhatsApp.webp" alt="WA" className="w-7 h-7 object-contain" />
           </a>
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-gray-600">
             <Menu />
@@ -957,8 +897,7 @@ export default function ConectApp() {
           </div>
         )}
         
-        {/* WhatsApp Button hides when typing (input has text) or focused */}
-        <WhatsAppButton hidden={inputMessage.length > 0 || (inputRef.current && document.activeElement === inputRef.current)} />
+
       </main>
     </div>
   );
