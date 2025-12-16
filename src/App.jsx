@@ -768,7 +768,26 @@ export default function ConectApp() {
       
       {/* SIDEBAR & HEADER */}
       <aside className="hidden md:flex flex-col w-72 bg-white border-r h-screen sticky top-0 z-20"><div className="p-6 border-b flex items-center gap-3"><div className="w-9 h-9"><Logo /></div><span className="font-bold text-xl">ConectApp</span></div><nav className="flex-1 p-4 space-y-2"><button onClick={() => setActiveTab('chat')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'chat' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><MessageSquare /> Chat</button><button onClick={() => setActiveTab('schedule')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'schedule' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><Clock /> Rutina</button><button onClick={() => setActiveTab('profile')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><User /> Perfil</button><button onClick={() => setActiveTab('evolution')} className={`w-full flex gap-3 px-4 py-3 rounded-xl ${activeTab === 'evolution' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}><BookOpen /> Bitácora</button></nav><div className="p-4 border-t"><Button onClick={handleLogout} variant="ghost" className="w-full justify-start text-red-500"><LogOut className="w-4 h-4 mr-2" /> Salir</Button></div></aside>
-      <header className="md:hidden bg-white/80 backdrop-blur-md border-b p-4 sticky top-0 z-30 flex justify-between items-center"><div className="flex items-center gap-2"><div className="w-8 h-8"><Logo /></div><span className="font-bold text-lg">ConectApp</span></div><button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2"><Menu /></button></header>
+      <header className="md:hidden bg-white/80 backdrop-blur-md border-b p-4 sticky top-0 z-30 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8"><Logo /></div>
+          <span className="font-bold text-lg">ConectApp</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <a 
+            href="https://wa.me/56965863160" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="p-2 mr-1 text-green-600 bg-green-50 rounded-full active:scale-95 transition-transform"
+            title="Soporte WhatsApp"
+          >
+            <img src="/img/WhatsApp.webp" alt="WA" className="w-5 h-5 object-contain" />
+          </a>
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-gray-600">
+            <Menu />
+          </button>
+        </div>
+      </header>
       {mobileMenuOpen && <div className="fixed inset-0 bg-white z-20 pt-24 px-6 md:hidden flex flex-col gap-4"><button onClick={() => { setActiveTab('chat'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><MessageSquare /> Chat</button><button onClick={() => { setActiveTab('schedule'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><Clock /> Rutina</button><button onClick={() => { setActiveTab('profile'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><User /> Perfil</button><button onClick={() => { setActiveTab('evolution'); setMobileMenuOpen(false); }} className="text-lg p-4 bg-gray-50 rounded-xl flex gap-3"><BookOpen /> Bitácora</button><Button onClick={handleLogout} variant="danger" className="mt-auto mb-8">Cerrar Sesión</Button></div>}
 
       <main className="flex-1 overflow-hidden relative h-[calc(100vh-64px)] md:h-screen bg-slate-50/50">
@@ -929,20 +948,12 @@ export default function ConectApp() {
             </div>
             <div className="p-4 bg-white/80 backdrop-blur-md border-t relative z-20 pb-2">
               <DailyTracker db={db} appId={appId} userId={user.uid} onSaved={() => showToast('Día registrado')} />
-              <form onSubmit={handleSendMessage} className="flex gap-2 md:gap-3 max-w-4xl mx-auto items-end">
-                
-                {/* Mobile WhatsApp Button (Integrated) */}
-                <a 
-                  href="https://wa.me/56965863160" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="md:hidden w-12 h-[56px] flex items-center justify-center bg-green-50 rounded-2xl border border-green-100 active:scale-95 transition-transform"
-                  title="Soporte Humano"
-                >
-                  <img src="/img/WhatsApp.webp" alt="Soporte" className="w-6 h-6 object-contain" />
-                </a>
-
-                <textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0 shadow-lg shadow-blue-200/50"><Send className="w-6 h-6 ml-0.5" /></Button></form></div>
+              <form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end">
+                <textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" />
+                <Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0 shadow-lg shadow-blue-200/50">
+                  <Send className="w-6 h-6 ml-0.5" />
+                </Button>
+              </form></div>
           </div>
         )}
         
