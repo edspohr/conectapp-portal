@@ -196,7 +196,7 @@ const WhatsAppButton = ({ hidden }) => {
 
   return (
     <div 
-      className={`fixed right-5 bottom-5 md:right-8 md:bottom-8 z-[60] flex flex-col items-end gap-3 transition-all duration-700 cubic-bezier(0.34, 1.56, 0.64, 1) ${hidden ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}
+      className={`fixed right-5 bottom-5 md:right-8 md:bottom-8 z-[60] hidden md:flex flex-col items-end gap-3 transition-all duration-700 cubic-bezier(0.34, 1.56, 0.64, 1) ${hidden ? 'translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -929,7 +929,20 @@ export default function ConectApp() {
             </div>
             <div className="p-4 bg-white/80 backdrop-blur-md border-t relative z-20 pb-2">
               <DailyTracker db={db} appId={appId} userId={user.uid} onSaved={() => showToast('Día registrado')} />
-              <form onSubmit={handleSendMessage} className="flex gap-3 max-w-4xl mx-auto items-end"><textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0"><Send className="w-6 h-6 ml-0.5" /></Button></form></div>
+              <form onSubmit={handleSendMessage} className="flex gap-2 md:gap-3 max-w-4xl mx-auto items-end">
+                
+                {/* Mobile WhatsApp Button (Integrated) */}
+                <a 
+                  href="https://wa.me/56965863160" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="md:hidden w-12 h-[56px] flex items-center justify-center bg-green-50 rounded-2xl border border-green-100 active:scale-95 transition-transform"
+                  title="Soporte Humano"
+                >
+                  <img src="/img/WhatsApp.webp" alt="Soporte" className="w-6 h-6 object-contain" />
+                </a>
+
+                <textarea ref={inputRef} value={inputMessage} onChange={handleInputChange} onFocus={() => { if(inputRef.current) inputRef.current.style.height = 'auto'; }} onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); }}} placeholder="Cuéntame..." className="flex-1 bg-gray-100/50 border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none max-h-40 min-h-[56px] shadow-inner" rows="1" /><Button type="submit" disabled={!inputMessage.trim() || isTyping} className="rounded-2xl w-14 h-[56px] p-0 shadow-lg shadow-blue-200/50"><Send className="w-6 h-6 ml-0.5" /></Button></form></div>
           </div>
         )}
         
